@@ -6,7 +6,20 @@ import {
   type ToolContext,
 } from "./llm-tools.js";
 
-type ChatTurn = { role: "user" | "assistant"; content: string };
+export type ChatTurn = { role: "user" | "assistant"; content: string };
+
+/**
+ * Opções para o agente domain-agnostic.
+ * Quando omitidas, recaem no comportamento legado (pizzeria).
+ */
+export type AgentOptions = {
+  systemPrompt?: string;
+  tools?: OllamaToolDefinition[];
+  executeTool?: (
+    name: string,
+    args: Record<string, unknown>
+  ) => Promise<{ ok: boolean; result?: unknown; error?: string }>;
+};
 
 type OllamaMsg = Record<string, unknown>;
 
@@ -76,11 +89,45 @@ const AGENT_SYSTEM_DEFAULT =
 
 const MAX_AGENT_STEPS = 8;
 
+/**
+ * Roda o agente LLM com tools.
+ *
+ * Assinatura legada (pizzeria):
+ *   runLlmToolAgent(turns, ctx, systemPrompt?)
+ *
+ * Assinatura modular (qualquer domínio):
+ *   runLlmToolAgent(turns, opts)
+ *   onde opts = { systemPrompt, tools, executeTool }
+ */
 export async function runLlmToolAgent(
   turns: ChatTurn[],
-  ctx: ToolContext,
-  systemPrompt: string = AGENT_SYSTEM_DEFAULT
+  ctxOrOpts: ToolContext | AgentOptions,
+  legacySystemPrompt?: string
 ): Promise<{ reply: string; trace?: Array<{ tool: string; ok: boolean }> }> {
+  let systemPrompt: string;
+  let activeTools: OllamaToolDefinition[];
+  let execTool: (
+    name: string,
+    args: Record<string, unknown>
+  ) => Promise<{ ok: boolean; result?: unknown; error?: string }>;
+
+  const isAgentOptions =
+    ctxOrOpts &&
+    ("tools" in ctxOrOpts || "executeTool" in ctxOrOpts || "systemPrompt" in ctxOrOpts) &&
+    !("schedule" in ctxOrOpts);
+
+  if (isAgentOptions) {
+    const opts = ctxOrOpts as AgentOptions;
+    systemPrompt = opts.systemPrompt ?? AGENT_SYSTEM_DEFAULT;
+    activeTools = opts.tools ?? LLM_TOOLS;
+    execTool = opts.executeTool ?? ((n, a) => executeLlmTool(n, a, { schedule: undefined as never, orders: undefined as never }));
+  } else {
+    const ctx = ctxOrOpts as ToolContext;
+    systemPrompt = legacySystemPrompt ?? AGENT_SYSTEM_DEFAULT;
+    activeTools = LLM_TOOLS;
+    execTool = (n, a) => executeLlmTool(n, a, ctx);
+  }
+
   const messages: OllamaMsg[] = [
     { role: "system", content: systemPrompt },
     ...turns.map((t) => ({ role: t.role, content: t.content })),
@@ -88,7 +135,7 @@ export async function runLlmToolAgent(
   const trace: Array<{ tool: string; ok: boolean }> = [];
 
   for (let step = 0; step < MAX_AGENT_STEPS; step++) {
-    const data = await ollamaChatOnce({ messages, tools: LLM_TOOLS });
+    const data = await ollamaChatOnce({ messages, tools: activeTools });
     const msg = data.message;
     if (!msg) throw new Error("Resposta sem message do Ollama.");
 
@@ -106,7 +153,7 @@ export async function runLlmToolAgent(
       const fn = tc.function!;
       const name = fn.name!;
       const args = parseToolArguments(fn.arguments);
-      const exec = await executeLlmTool(name, args, ctx);
+      const exec = await execTool(name, args);
       trace.push({ tool: name, ok: exec.ok });
       const payload = exec.ok ? exec.result : { error: exec.error };
       messages.push({
