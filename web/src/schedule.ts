@@ -1,6 +1,7 @@
-/** Deve refletir `api/src/services/schedule-store.ts` (horário de Brasília). */
+/** Deve refletir `api/src/domains/dental/index.ts` (horário de Brasília). */
 export const SCHEDULE_HINT =
-  "Retirada/entrega: 18h–23h no horário de Brasília, slots de 1h (último início 22h).";
+  "Atendimento: seg–sex 8h–17h no horário de Brasília, slots de 1h (último início às 17h).";
+
 
 export function formatSlotTimeBr(isoUtc: string): string {
   return new Date(isoUtc).toLocaleTimeString("pt-BR", {

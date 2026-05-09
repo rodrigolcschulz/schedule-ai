@@ -45,12 +45,12 @@ export function Chat() {
     try {
       const { reply, trace } = useTools
         ? await fetchLlmChatAgent(nextMessages)
-        : await fetchLlmChat(nextMessages);
-      let text = reply;
+        : { ...(await fetchLlmChat(nextMessages)), trace: undefined };
+      let replyText = reply;
       if (trace?.length) {
-        text += `\n\n_(tools: ${trace.map((t) => `${t.tool}${t.ok ? "✓" : "✗"}`).join(", ")})_`;
+        replyText += `\n\n_(tools: ${trace.map((t: { tool: string; ok: boolean }) => `${t.tool}${t.ok ? "✓" : "✗"}`).join(", ")})_`;
       }
-      setMessages([...nextMessages, { role: "assistant", content: text }]);
+      setMessages([...nextMessages, { role: "assistant", content: replyText }]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao falar com o modelo");
       setMessages((m) => m.slice(0, -1));
@@ -62,9 +62,9 @@ export function Chat() {
   return (
     <div className="page">
       <header className="header">
-        <h1>LLM local — mesmo backend de agenda e vendas</h1>
+        <h1>Assistente IA — Clínica Odonto Demo</h1>
         <p className="muted">
-          Chat livre ou modo agente com tools (cardápio, horários, pedidos). O backend encaminha para o{" "}
+          Chat livre ou modo agente com tools (serviços, horários, agendamentos). O backend encaminha para o{" "}
           <a href="https://ollama.com" target="_blank" rel="noreferrer">
             Ollama
           </a>{" "}
@@ -122,14 +122,14 @@ export function Chat() {
             onChange={(e) => setUseTools(e.target.checked)}
           />
           <span>
-            Modo agente (tools de agendamento + pedido) — requer modelo com suporte a tools no
+            Modo agente (tools de agendamento odontológico) — requer modelo com suporte a tools no
             Ollama (ex.: Llama 3.1, Qwen 2.5).
           </span>
         </label>
         <div className="chat-log">
           {messages.length === 0 && (
             <p className="muted small">
-              Dica: pergunte sobre o cardápio demo ou peça um resumo em português.
+              Dica: pergunte sobre serviços, preços ou peça para agendar uma consulta.
             </p>
           )}
           {messages.map((m, i) => (

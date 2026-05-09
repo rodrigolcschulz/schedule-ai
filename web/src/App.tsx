@@ -11,7 +11,7 @@ export function App() {
           end
           className={({ isActive }) => (isActive ? "nav-link active" : "nav-link")}
         >
-          Agendamento e vendas
+          Agendamento
         </NavLink>
         <NavLink
           to="/chat"

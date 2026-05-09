@@ -6,6 +6,7 @@ services:
     environment:
       PORT: "3001"
       HOST: "0.0.0.0"
+      BUSINESS_DOMAIN: dental
       # Stub: só loga mensagens; integração Baileys pode ser feita depois
       WHATSAPP_PROVIDER: stub
       # Ollama no host (Docker Desktop / Linux com host-gateway)
