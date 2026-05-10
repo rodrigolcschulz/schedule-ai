@@ -83,16 +83,14 @@ export function App() {
     setChatLoading(true);
     try {
       const { reply, trace } = await fetchLlmChatAgent(next);
-      let replyText = reply;
       if (trace?.length) {
-        const toolNames = trace
-          .map((t: { tool: string; ok: boolean }) => `${t.tool}${t.ok ? " ✓" : " ✗"}`)
-          .join(", ");
-        replyText += `\n\n_[${toolNames}]_`;
-        // refresh appointments after tool use
-        void loadAppointments();
+        // Recarrega o painel lateral após execução de tools para manter dados sincronizados.
+        const hasSuccessfulTool = trace.some((t: { tool: string; ok: boolean }) => t.ok);
+        if (hasSuccessfulTool) {
+          await Promise.all([loadAppointments(), loadSlots()]);
+        }
       }
-      setMessages([...next, { role: "assistant", content: replyText }]);
+      setMessages([...next, { role: "assistant", content: reply }]);
     } catch (e) {
       setChatError(e instanceof Error ? e.message : "Erro ao falar com o modelo");
       setMessages((m) => m.slice(0, -1));

@@ -16,6 +16,42 @@ function asStr(v: unknown): string | undefined {
   return typeof v === "string" ? v : undefined;
 }
 
+function normalizeDateInput(raw: string): string | undefined {
+  const s = raw.trim();
+
+  // ISO: YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+
+  // BR: DD/MM or DD/MM/YY or DD/MM/YYYY
+  const m = /^(\d{1,2})\/(\d{1,2})(?:\/(\d{2}|\d{4}))?$/.exec(s);
+  if (!m) return undefined;
+
+  const day = Number(m[1]);
+  const month = Number(m[2]);
+  if (day < 1 || day > 31 || month < 1 || month > 12) return undefined;
+
+  const now = new Date();
+  const yearPart = m[3];
+  const year = !yearPart
+    ? now.getFullYear()
+    : yearPart.length === 2
+      ? 2000 + Number(yearPart)
+      : Number(yearPart);
+
+  const d = new Date(Date.UTC(year, month - 1, day));
+  if (
+    d.getUTCFullYear() !== year ||
+    d.getUTCMonth() !== month - 1 ||
+    d.getUTCDate() !== day
+  ) {
+    return undefined;
+  }
+
+  return `${year.toString().padStart(4, "0")}-${month
+    .toString()
+    .padStart(2, "0")}-${day.toString().padStart(2, "0")}`;
+}
+
 function resolveServiceId(input: string): string | undefined {
   const trimmed = input.trim().toLowerCase();
   if (!trimmed) return undefined;
@@ -133,12 +169,19 @@ export async function executeDentalTool(
         return { ok: true, result: servicesPayloadForApi() };
 
       case "list_available_slots": {
-        const date = asStr(args.date);
-        if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        const rawDate = asStr(args.date);
+        const date = rawDate ? normalizeDateInput(rawDate) : undefined;
+        if (!date) {
           return { ok: false, error: "invalid_date" };
         }
         const slots = ctx.schedule.getSlotsForDay(date);
         const taken = ctx.schedule.getBookedSlotIds();
+        const availableSlots = slots.filter((s) => !taken.has(s.id));
+
+        const timeLabel = (slotId: string) => `${slotId.slice(11, 13)}:${slotId.slice(13, 15)}`;
+        const morningSlots = availableSlots.filter((s) => Number(s.id.slice(11, 13)) < 12);
+        const afternoonSlots = availableSlots.filter((s) => Number(s.id.slice(11, 13)) >= 12);
+
         return {
           ok: true,
           result: {
@@ -149,6 +192,11 @@ export async function executeDentalTool(
               ends_at: s.endsAt,
               available: !taken.has(s.id),
             })),
+            available_slots: availableSlots.map((s) => s.id),
+            available_morning_slots: morningSlots.map((s) => s.id),
+            available_afternoon_slots: afternoonSlots.map((s) => s.id),
+            available_morning_times: morningSlots.map((s) => timeLabel(s.id)),
+            available_afternoon_times: afternoonSlots.map((s) => timeLabel(s.id)),
           },
         };
       }
