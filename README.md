@@ -2,7 +2,7 @@
 
 Demo full-stack de um **agente de IA para negócios locais**: agendamento, atendimento e FAQ via chat web e WhatsApp. Arquitetura **modular por domínio** — troque uma variável de ambiente e o mesmo código vira uma clínica odontológica, uma pizzaria ou qualquer outro negócio.
 
-<img width="240" height="240" alt="demo_scheduling_ai" src="https://github.com/user-attachments/assets/9cea53ed-daae-44d0-a981-9e5b4c36fb84" />
+https://github.com/user-attachments/assets/eaedb13c-61b4-41c3-9fa7-d2d85136de87
 
 Monorepo **Node**: API **Fastify** (`api/`) + **React + Vite** (`web/`). Dados em **memória** (sem banco nesta versão). WhatsApp usa o provedor **`stub`** por padrão; Baileys ou outro canal pode ser ligado depois.
 
