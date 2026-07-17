@@ -67,6 +67,11 @@ class RuleEngine:
 
     def _check_required_args(self, plan: PlannerResponse) -> list[str]:
         """Garante que create_booking tem todos os args antes de executar."""
+        # Se o plano já está em modo de esclarecimento, ainda estamos coletando
+        # dados do paciente e não devemos acusar erro técnico de args faltantes.
+        if plan.needsClarification or len(plan.missingFields) > 0:
+            return []
+
         errors = []
         for step in plan.steps:
             if step.toolName == "create_booking":

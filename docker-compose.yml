@@ -7,6 +7,12 @@ services:
       PORT: "3001"
       HOST: "0.0.0.0"
       BUSINESS_DOMAIN: dental
+      SCHEDULE_PERSISTENCE: postgres
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGDATABASE: schedule_ai
+      PGUSER: schedule_ai
+      PGPASSWORD: schedule_ai
       # Stub: só loga mensagens; integração Baileys pode ser feita depois
       WHATSAPP_PROVIDER: stub
       # Node não fala mais direto com o Ollama — fala com o serviço python-ai
@@ -18,6 +24,7 @@ services:
       - "3001:3001"
     depends_on:
       - python-ai
+      - postgres
 
   python-ai:
     build:

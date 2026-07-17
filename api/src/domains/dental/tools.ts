@@ -182,7 +182,7 @@ export async function executeDentalTool(
           return { ok: false, error: "invalid_date" };
         }
         const slots = ctx.schedule.getSlotsForDay(date);
-        const taken = ctx.schedule.getBookedSlotIds();
+        const taken = await ctx.schedule.getBookedSlotIds();
         const availableSlots = slots.filter((s) => !taken.has(s.id));
 
         const timeLabel = (slotId: string) => `${slotId.slice(11, 13)}:${slotId.slice(13, 15)}`;
@@ -224,7 +224,7 @@ export async function executeDentalTool(
           return { ok: false, error: buildInvalidServiceError(serviceRaw) };
         }
 
-        const res = ctx.patients.createAppointment(ctx.schedule, {
+        const res = await ctx.patients.createAppointment(ctx.schedule, {
           slotId,
           patientName,
           phone,
@@ -250,7 +250,7 @@ export async function executeDentalTool(
       case "find_booking": {
         const phone = args.phone != null ? normPhone(String(args.phone)) : "";
         if (!phone) return { ok: false, error: "missing_phone" };
-        const list = ctx.patients.listAppointmentsByPhone(phone).map((a) => ({
+        const list = (await ctx.patients.listAppointmentsByPhone(phone)).map((a) => ({
           booking_id: a.bookingId,
           service: a.serviceName,
           starts_at: a.startsAt,
@@ -265,18 +265,18 @@ export async function executeDentalTool(
         const phone = args.phone != null ? normPhone(String(args.phone)) : "";
         if (!bookingId || !phone) return { ok: false, error: "missing_fields" };
 
-        const appts = ctx.patients.listAppointmentsByPhone(phone);
+        const appts = await ctx.patients.listAppointmentsByPhone(phone);
         const target = appts.find((a) => a.bookingId === bookingId);
         if (!target) return { ok: false, error: "not_found_or_phone" };
 
-        ctx.patients.cancelByBookingId(bookingId, ctx.schedule);
+        await ctx.patients.cancelByBookingId(bookingId, ctx.schedule);
         return { ok: true, result: { cancelled: bookingId } };
       }
 
       case "get_patient_history": {
         const phone = args.phone != null ? normPhone(String(args.phone)) : "";
         if (!phone) return { ok: false, error: "missing_phone" };
-        const history = ctx.patients.listAppointmentsByPhone(phone).map((a) => ({
+        const history = (await ctx.patients.listAppointmentsByPhone(phone)).map((a) => ({
           booking_id: a.bookingId,
           service: a.serviceName,
           starts_at: a.startsAt,

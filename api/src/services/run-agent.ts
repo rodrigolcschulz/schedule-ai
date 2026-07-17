@@ -64,6 +64,7 @@ export async function runAgent(
       result: { toolResults },
       ...(hasToolError ? { error: "tool_execution_failed" } : {}),
     },
+    sessionId,
   });
 
   if (!reflected.approved) {

@@ -71,7 +71,7 @@ app.get("/orders", async (_req, reply) => {
 app.get("/slots", async (req) => {
   const q = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).parse(req.query);
   const slots = ctx.schedule.getSlotsForDay(q.date);
-  const taken = ctx.schedule.getBookedSlotIds();
+  const taken = await ctx.schedule.getBookedSlotIds();
   return {
     date: q.date,
     slots: slots.map((s) => ({ ...s, available: !taken.has(s.id) })),
@@ -95,7 +95,7 @@ app.post("/bookings", async (req, reply) => {
   const { patients } = ctx as unknown as { patients: import("./domains/dental/patient-store.js").PatientStore };
 
   if (body.serviceId) {
-    const res = patients.createAppointment(ctx.schedule, {
+    const res = await patients.createAppointment(ctx.schedule, {
       slotId: slot.id,
       patientName: body.customerName,
       phone: body.phone.replace(/\D/g, "") || body.phone,
@@ -106,7 +106,7 @@ app.post("/bookings", async (req, reply) => {
     return res;
   }
 
-  const res = ctx.schedule.createBooking({
+  const res = await ctx.schedule.createBooking({
     slotId: slot.id,
     startsAt: slot.startsAt,
     customerName: body.customerName,
@@ -119,7 +119,7 @@ app.post("/bookings", async (req, reply) => {
 app.get("/bookings", async () => ctx.schedule.listBookings());
 
 app.delete<{ Params: { id: string } }>("/bookings/:id", async (req, reply) => {
-  const ok = ctx.schedule.cancelBooking(req.params.id);
+  const ok = await ctx.schedule.cancelBooking(req.params.id);
   if (!ok) return reply.code(404).send({ error: "not_found" });
   return { ok: true };
 });
@@ -127,7 +127,7 @@ app.delete<{ Params: { id: string } }>("/bookings/:id", async (req, reply) => {
 app.get("/appointments", async (req) => {
   const { patients } = ctx as unknown as { patients: import("./domains/dental/patient-store.js").PatientStore };
   const q = z.object({ phone: z.string().optional() }).parse(req.query);
-  const list = q.phone ? patients.listAppointmentsByPhone(q.phone) : patients.listAll();
+  const list = q.phone ? await patients.listAppointmentsByPhone(q.phone) : await patients.listAll();
   return { appointments: list };
 });
 

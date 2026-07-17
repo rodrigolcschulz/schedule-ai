@@ -129,6 +129,9 @@ Serviços:
 - AI_BASE_URL (default: http://localhost:8001)
 - BUSINESS_DOMAIN (default: dental)
 - WHATSAPP_PROVIDER (default: stub)
+- SCHEDULE_PERSISTENCE (memory | postgres, default: memory)
+- PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD
+- DATABASE_URL (opcional, alternativa aos PG*)
 
 ### python-ai
 
@@ -145,6 +148,38 @@ Serviços:
 3. Se faltam dados, retorna pergunta objetiva para completar campos.
 4. Se o plano está completo, API executa tools no domínio.
 5. Python AI faz reflexão em POST /ai/reflect e devolve resposta final.
+
+## Agenda e bookings no PostgreSQL
+
+O projeto agora suporta persistencia de agenda/agendamentos no banco sem mudar endpoints.
+
+Como funciona:
+
+1. Os slots continuam sendo gerados por regra (seg-sex, 8h-17h).
+2. O que vai para o banco e' booking/appointment.
+3. A disponibilidade e' calculada por `slot_id` reservado no Postgres.
+4. A API usa `SCHEDULE_PERSISTENCE=postgres` para ativar o modo banco.
+
+Arquivos principais:
+
+- api/src/services/schedule-store.ts
+- api/src/domains/dental/patient-store.ts
+- api/src/services/pg.ts
+- api/sql/001_init_schedule.sql
+
+### Precisa de carga SQL?
+
+Nao obrigatoriamente. O sistema funciona sem seed. A tabela comeca vazia e os dados entram pelos endpoints/tools.
+
+Use seed apenas para demo visual (ex.: preencher alguns agendamentos para video).
+
+### Migration SQL
+
+Existe uma migration inicial em:
+
+- api/sql/001_init_schedule.sql
+
+Ela cria as tabelas `bookings` e `appointments` com indices e constraints.
 
 ## Roadmap para destaque no LinkedIn
 

@@ -35,8 +35,13 @@ export const dentalDomain: BusinessDomain = {
   },
 
   createContext(): DomainContext {
-    const schedule = new ScheduleStore(DENTAL_SCHEDULE);
-    const patients = new PatientStore();
+    const persistence =
+      (process.env.SCHEDULE_PERSISTENCE ?? "memory").toLowerCase() === "postgres"
+        ? "postgres"
+        : "memory";
+
+    const schedule = new ScheduleStore(DENTAL_SCHEDULE, { persistence });
+    const patients = new PatientStore({ persistence });
     return { schedule, patients };
   },
 
@@ -77,7 +82,7 @@ export const dentalDomain: BusinessDomain = {
         return `Horário ${hour}h inválido para ${date}. Envie "horarios ${date}" para ver disponíveis.`;
       }
 
-      const res = patients.createAppointment(schedule, {
+      const res = await patients.createAppointment(schedule, {
         slotId: slot.id,
         patientName: patientName || `Paciente ${from}`,
         phone: from,

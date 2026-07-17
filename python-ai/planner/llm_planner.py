@@ -1,5 +1,6 @@
 import json
 from copy import deepcopy
+from typing import Optional
 from contracts.planner import (
     PlannerRequest, PlannerResponse, MissingField, PlanStep,
     ExecuteRequest, ExecuteResponse,
@@ -44,7 +45,7 @@ class LLMPlanner:
         memory = self.memory_store.get(request.sessionId) if request.sessionId else {}
 
         # 2. LLM extrai intenção + dados do paciente
-        extracted = self._extract(request.message, memory)
+        extracted = self._extract(request.message, memory, request.history or [])
         intent = extracted.get("intent", "unknown")
         confidence = extracted.get("confidence", 0.5)
         patient = extracted.get("patient", {})
@@ -83,7 +84,8 @@ class LLMPlanner:
         rule_result = self.rule_engine.check(plan)
         if not rule_result.valid:
             plan.needsClarification = True
-            plan.suggestedReply = rule_result.errors[0]
+            if not missing:
+                plan.suggestedReply = self._friendly_rule_error(rule_result.errors[0])
 
         return plan
 
@@ -114,12 +116,20 @@ class LLMPlanner:
 
     # --- helpers privados ---
 
-    def _extract(self, message: str, memory: dict) -> dict:
+        def _extract(self, message: str, memory: dict, history: list[dict]) -> dict:
+                recent_history = history[-6:] if history else []
         prompt = f"""
 Analise a mensagem de um paciente de clínica odontológica.
 Dados já conhecidos: {json.dumps(memory, ensure_ascii=False)}
+Histórico recente (ordem cronológica): {json.dumps(recent_history, ensure_ascii=False)}
 
 Mensagem: "{message}"
+
+Regras de interpretação:
+- Se a mensagem atual for uma confirmação curta (ex.: "sim", "pode", "ok", "isso")
+    e no histórico recente a assistente tiver oferecido agendar/continuar agendamento,
+    classifique como intent="book".
+- Reaproveite dados já conhecidos em memória para evitar perguntas repetidas.
 
 Responda APENAS com JSON válido:
 {{
@@ -141,10 +151,26 @@ Responda APENAS com JSON válido:
 
     def _missing_field_info(self, field: str) -> dict:
         info = {
-            "name":    {"field": "name",    "reason": "Nome do paciente não informado.", "question": "Qual o seu nome?"},
-            "phone":   {"field": "phone",   "reason": "Telefone não informado.",         "question": "Qual o seu telefone?"},
-            "service": {"field": "service", "reason": "Serviço não identificado.",       "question": "Qual serviço você precisa? (limpeza, avaliação, extração...)"},
-            "date":    {"field": "date",    "reason": "Data não informada.",             "question": "Qual data prefere para a consulta?"},
+            "name": {
+                "field": "name",
+                "reason": "Nome do paciente não informado.",
+                "question": "Perfeito! Para eu continuar, qual é o seu nome completo?",
+            },
+            "phone": {
+                "field": "phone",
+                "reason": "Telefone não informado.",
+                "question": "Ótimo! Pode me informar seu telefone com DDD, por favor?",
+            },
+            "service": {
+                "field": "service",
+                "reason": "Serviço não identificado.",
+                "question": "Certo! Qual serviço você deseja? (limpeza, avaliação, extração, etc.)",
+            },
+            "date": {
+                "field": "date",
+                "reason": "Data não informada.",
+                "question": "Perfeito! Qual data você prefere para a consulta?",
+            },
         }
         return info.get(field, {"field": field, "reason": f"{field} não informado.", "question": f"Qual o {field}?"})
 
@@ -162,6 +188,19 @@ Responda APENAS com JSON válido:
 
     def _ask_next(self, missing: list[MissingField]) -> str:
         return missing[0].question  # pergunta um campo por vez
+
+    def _friendly_rule_error(self, error: Optional[str]) -> str:
+        if not error:
+            return "Preciso de mais alguns dados para seguir com seu atendimento."
+
+        if "Data '" in error and "formato inválido" in error:
+            return "Consegue me enviar a data no formato AAAA-MM-DD? Ex.: 2026-07-30."
+        if "data passada" in error:
+            return "Essa data já passou. Qual data futura você prefere para a consulta?"
+        if "não atende" in error:
+            return "Nesse dia a clínica está fechada. Posso te ajudar a escolher outro dia útil?"
+
+        return "Preciso confirmar alguns dados para seguir com o agendamento."
 
     def _confirm_summary(self, intent: str, merged: dict) -> str:
         if intent == "book":
