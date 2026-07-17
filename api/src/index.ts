@@ -311,6 +311,7 @@ app.post("/llm/chat/agent", async (req, reply) => {
         result: { toolResults },
         ...(hasToolError ? { error: "tool_execution_failed" } : {}),
       },
+      sessionId,
     });
 
     if (!reflected.approved) {

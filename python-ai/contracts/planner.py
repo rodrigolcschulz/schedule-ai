@@ -67,6 +67,7 @@ class ReflectRequest(BaseModel):
     version: str = "1.0"
     plan: PlannerResponse
     executeResult: ExecuteResponse
+    sessionId: Optional[str] = None
 
 class ReflectResponse(BaseModel):
     version: str = "1.0"

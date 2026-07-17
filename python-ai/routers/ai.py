@@ -46,3 +46,25 @@ def reflect(request: ReflectRequest):
     except Exception as e:
         logger.error(f"[/ai/reflect] {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/memory/{session_id}")
+def get_memory(session_id: str):
+    try:
+        return {
+            "sessionId": session_id,
+            "data": planner.memory_store.get(session_id),
+        }
+    except Exception as e:
+        logger.error(f"[/ai/memory/{{session_id}}] {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/memory/{session_id}")
+def clear_memory(session_id: str):
+    try:
+        planner.memory_store.clear(session_id)
+        return {"ok": True}
+    except Exception as e:
+        logger.error(f"[/ai/memory/{{session_id}} DELETE] {e}")
+        raise HTTPException(status_code=500, detail=str(e))

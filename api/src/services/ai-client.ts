@@ -58,6 +58,7 @@ export interface ExecuteResult {
 export interface ReflectRequest {
   plan: PlannerResponse;
   executeResult: ExecuteResult;
+  sessionId?: string;
 }
 
 export interface ReflectResponse {

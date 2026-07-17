@@ -29,6 +29,8 @@ services:
       # Ollama no host (Docker Desktop / Linux com host-gateway)
       OLLAMA_URL: http://host.docker.internal:11434
       OLLAMA_MODEL: llama3.1
+      MEMORY_BACKEND: sqlite
+      MEMORY_SQLITE_PATH: /app/data/memory.db
     extra_hosts:
       - "host.docker.internal:host-gateway"
     expose:
@@ -36,6 +38,19 @@ services:
     # Descomente para testar o python-ai direto no host (curl, /ai/health)
     ports:
       - "8001:8001"
+    volumes:
+      - python_ai_data:/app/data
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: schedule_ai
+      POSTGRES_USER: schedule_ai
+      POSTGRES_PASSWORD: schedule_ai
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
 
   web:
     build:
@@ -45,3 +60,7 @@ services:
       - "8080:80"
     depends_on:
       - api
+
+volumes:
+  postgres_data:
+  python_ai_data:

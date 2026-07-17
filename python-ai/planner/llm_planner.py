@@ -1,5 +1,5 @@
-# python-ai/planner/llm_planner.py
 import json
+from copy import deepcopy
 from contracts.planner import (
     PlannerRequest, PlannerResponse, MissingField, PlanStep,
     ExecuteRequest, ExecuteResponse,
@@ -97,9 +97,10 @@ class LLMPlanner:
 
     def reflect_on_result(self, request: ReflectRequest) -> ReflectResponse:
         # LLM gera a resposta final em linguagem natural
+        session_memory = self.memory_store.get(request.sessionId) if request.sessionId else {}
         context = {
             "intent": request.plan.intent,
-            "patient": self.memory_store.get(request.plan.domainId) or {},
+            "patient": session_memory,
             "result": request.executeResult.result,
         }
         final_reply = self._generate_reply(context)
@@ -148,7 +149,7 @@ Responda APENAS com JSON válido:
         return info.get(field, {"field": field, "reason": f"{field} não informado.", "question": f"Qual o {field}?"})
 
     def _build_steps(self, intent: str, merged: dict) -> list[PlanStep]:
-        steps = INTENT_STEPS.get(intent, [])
+        steps = deepcopy(INTENT_STEPS.get(intent, []))
         # Injeta os args conhecidos nos steps relevantes
         for step in steps:
             if step.toolName == "list_available_slots" and merged.get("date"):

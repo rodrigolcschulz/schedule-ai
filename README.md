@@ -1,136 +1,91 @@
 # schedule-ai
 
-Demo full-stack de agente de IA para atendimento e agendamento de negócios locais.
+AI Scheduling Assistant para atendimento conversacional e agendamento com tool calling.
 
-Arquitetura atual: API e frontend em TypeScript + serviço Python dedicado para inteligência de IA (planner, contracts, memory, rules e orquestração).
+Projeto de demo full-stack orientado a portfólio: API de negócio, serviço de IA desacoplado, UI web, integração WhatsApp stub e execução local com Ollama.
 
-Stack principal:
+## Stack
 
-- API em Fastify + TypeScript (`api`)
-- Web em React + Vite (`web`)
-- AI Service em Python + FastAPI (`python-ai`)
-- Ollama como motor de LLM (com suporte a OpenAI e Claude via adapter)
-- Persistência em memória nesta fase
+- Fastify + TypeScript (API de domínio)
+- React + Vite (frontend)
+- FastAPI + Python (planner e orquestração de IA)
+- Ollama (local) + adapter para OpenAI/Claude
+- LangGraph (orquestração de estados)
+- Docker Compose
+- PostgreSQL (serviço pronto no compose para evolução de persistência)
 
-## Visão geral
+## O que este projeto demonstra
 
-O projeto separa claramente três camadas:
+- Memória de sessão para contexto de conversa (com backend em memória ou SQLite)
+- Tool calling controlado por plano estruturado
+- Agenda e disponibilidade de horários
+- Confirmação de ações antes de executar fluxos críticos
+- Logs de requisição no serviço Python e tracing básico no fluxo do agente
+- Arquitetura para extensão de domínio (dental hoje, outros domínios amanhã)
 
-- **Domínio de negócio** — entidades, CRUD, auth e integrações (Fastify)
-- **Inteligência de IA** — planner, contracts, memory, rules e orquestração (Python)
-- **Canal de entrada** — chat web e WhatsApp (Fastify + React)
-
-O domínio mais completo no repositório é o dental.
-
-## Arquitetura alvo
+## Arquitetura
 
 ```text
-Fastify API (TypeScript)
-├── Patients
-├── Appointments
-├── Services
-├── Authentication
-└── Internal AI API
-      |
-      v (POST /ai/plan, /ai/execute, /ai/reflect)
-Python AI Service (FastAPI)
-├── Planner
-├── Contracts (Pydantic)
-├── Memory (short-term e long-term)
-├── Tool Registry
-├── Rules Engine
-├── State Machine (LangGraph)
-├── Reflection
-├── Guardrails
-└── Provider Adapter (Ollama / OpenAI / Claude)
-      |
-      v
-Model Provider
-└── Ollama local (e/ou cloud models)
+Web (React)
+  -> API (Fastify / TypeScript)
+      -> Python AI (FastAPI)
+          -> Planner + Rules + Guardrails + Memory + LangGraph
+              -> Provider Adapter (Ollama/OpenAI/Claude)
 ```
 
-## Estrutura de pastas
+## Estrutura principal
 
 ```text
 schedule-ai/
-├── api/                         # Fastify + TypeScript
-│   └── src/
-│       ├── domains/dental/
-│       ├── services/
-│       │   ├── ai-client.ts
-│       │   └── run-agent.ts
-│       └── index.ts
-├── web/                         # React + Vite
-├── python-ai/                   # FastAPI (novo)
-│   ├── main.py
-│   ├── Dockerfile
-│   ├── routers/
-│   │   └── ai.py               # /ai/plan, /ai/execute, /ai/reflect, /ai/health
-│   ├── contracts/
-│   │   └── planner.py          # Pydantic — espelha o Zod do TS
-│   ├── planner/
-│   │   └── llm_planner.py
-│   ├── memory/
-│   │   └── memory_store.py
-│   ├── rules/
-│   │   └── rules_engine.py
-│   ├── graph/
-│   │   └── state_machine.py    # LangGraph
-│   ├── guardrails/
-│   │   └── guardrails.py
-│   ├── providers/
-│   │   └── adapter.py          # Ollama / OpenAI / Claude
-│   └── requirements.txt
+├── api/
+├── web/
+├── python-ai/
+├── docs/
+├── docker/
+└── docker-compose.yml
 ```
 
-## Contratos
+## Endpoints principais
 
-Os contratos são definidos em JSON Schema e gerados para ambas as linguagens:
+### API (3001)
 
-- TypeScript: Zod (`api/src/services/planner-contract.ts`)
-- Python: Pydantic (`python-ai/contracts/planner.py`)
+- GET /health
+- GET /domain
+- GET /catalog
+- GET /slots?date=YYYY-MM-DD
+- POST /bookings
+- GET /bookings
+- DELETE /bookings/:id
+- GET /appointments?phone=
+- GET /llm/status
+- GET /llm/tools
+- POST /llm/tools/invoke
+- POST /llm/planner
+- POST /llm/chat
+- POST /llm/chat/agent
+- POST /integrations/whatsapp/simulate-inbound
 
-Isso garante compatibilidade e evita drift entre os serviços.
+### Python AI (8001)
 
-Exemplo de plano (versão 1.0):
+- GET /ai/health
+- POST /ai/plan
+- POST /ai/execute
+- POST /ai/reflect
+- GET /ai/memory/{session_id}
+- DELETE /ai/memory/{session_id}
 
-```json
-{
-  "version": "1.0",
-  "domainId": "dental",
-  "summary": "Plano montado para intenção book.",
-  "intent": "book",
-  "confidence": 0.85,
-  "needsClarification": true,
-  "missingFields": [
-    {
-      "field": "date",
-      "reason": "A data do atendimento não foi informada.",
-      "question": "Qual data você prefere para a consulta?"
-    }
-  ],
-  "steps": [
-    {
-      "id": "slots.list",
-      "title": "Consultar horários disponíveis na data",
-      "toolName": "list_available_slots",
-      "toolArgs": { "date": "2026-06-29" }
-    }
-  ],
-  "suggestedReply": "Qual data você prefere para a consulta?"
-}
-```
+## Rodando localmente
 
-## Como rodar
-
-### Desenvolvimento
+### 1) Subir API + Web
 
 ```bash
-# API + Web (na raiz)
 npm install
 npm run dev
+```
 
-# Python AI Service (terminal separado)
+### 2) Subir python-ai
+
+```bash
 cd python-ai
 python -m venv .venv
 # Windows PowerShell
@@ -139,32 +94,22 @@ pip install -r requirements.txt
 python main.py
 ```
 
-### Ollama local (Windows)
+### 3) Garantir Ollama disponível
 
 ```bash
-# Ver modelos locais
-ollama list
-
-# Baixar modelo (uma vez)
 ollama pull llama3.1
-
-# Rodar modelo no terminal
 ollama run llama3.1
-
-# Subir servidor manualmente apenas se nao estiver ativo
+# se necessário
 ollama serve
 ```
 
-Se `ollama serve` retornar erro de bind na porta `11434`, significa que o Ollama ja esta rodando.
-
-Notas:
+URLs de desenvolvimento:
 
 - Web: http://localhost:5173
 - API: http://localhost:3001
 - Python AI: http://localhost:8001
-- O backend de IA precisa do Ollama disponível (padrão: http://localhost:11434)
 
-### Docker
+## Rodando com Docker
 
 ```bash
 docker compose up --build
@@ -175,42 +120,40 @@ Serviços:
 - Web: http://localhost:8080
 - API: http://localhost:3001
 - Python AI: http://localhost:8001
+- PostgreSQL: localhost:5432
 
-## Endpoints principais
+## Variáveis importantes
 
-### Fastify (porta 3001)
+### API
 
-- `GET  /health`
-- `GET  /domain`
-- `GET  /catalog`
-- `GET  /slots?date=YYYY-MM-DD`
-- `POST /bookings`
-- `GET  /bookings`
-- `DELETE /bookings/:id`
-- `GET  /appointments?phone=`
-- `GET  /llm/status`
-- `POST /llm/chat`
-- `POST /llm/tools/invoke`
-- `POST /llm/planner`
-- `POST /llm/chat/agent`
-- `POST /integrations/whatsapp/simulate-inbound`
+- AI_BASE_URL (default: http://localhost:8001)
+- BUSINESS_DOMAIN (default: dental)
+- WHATSAPP_PROVIDER (default: stub)
 
-### Python AI Service (porta 8001)
+### python-ai
 
-- `GET  /ai/health`
-- `POST /ai/plan`
-- `POST /ai/execute`
-- `POST /ai/reflect`
+- LLM_PROVIDER (default: ollama)
+- OLLAMA_URL (default: http://localhost:11434)
+- OLLAMA_MODEL (default: llama3.1)
+- MEMORY_BACKEND (memory | sqlite, default: memory)
+- MEMORY_SQLITE_PATH (default: ./data/memory.db)
 
-## Fluxo do agente com planner acoplado
+## Fluxo do agente
 
-No `POST /llm/chat/agent`:
+1. API recebe mensagem em POST /llm/chat/agent.
+2. Python AI gera plano em POST /ai/plan.
+3. Se faltam dados, retorna pergunta objetiva para completar campos.
+4. Se o plano está completo, API executa tools no domínio.
+5. Python AI faz reflexão em POST /ai/reflect e devolve resposta final.
 
-1. O Fastify cria um plano chamando `/ai/plan` no Python service.
-2. Se o plano indicar falta de dados, retorna a pergunta objetiva do planner.
-3. Se o plano estiver completo, executa o fluxo do agente com tools.
-4. A resposta inclui o campo `plan` para auditoria do fluxo.
+## Roadmap para destaque no LinkedIn
 
-## Documentação
+- Persistência de agenda e memória em PostgreSQL
+- Telemetria com correlação de request_id entre API e python-ai
+- Conector real de WhatsApp (Baileys)
+- Painel de observabilidade e histórico de conversas
+- Suporte MCP para ferramentas externas de calendário/CRM
 
-Neste momento a documentação principal está neste README e no `python-ai/README.md`.
+## Licença
+
+MIT (ver LICENSE)

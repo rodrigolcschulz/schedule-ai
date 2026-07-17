@@ -1,6 +1,6 @@
 # python-ai — Estrutura e módulos
 
-Serviço de inteligência em Python (FastAPI) que roda ao lado da API Fastify. Toda a lógica de IA fica aqui: planejamento, regras, memória, orquestração e guardrails. O modelo de linguagem roda localmente via Ollama.
+Servico de inteligencia em Python (FastAPI) que roda ao lado da API Fastify. Toda a logica de IA fica aqui: planejamento, regras, memoria, orquestracao e guardrails. O modelo de linguagem roda localmente via Ollama.
 
 ---
 
@@ -57,6 +57,8 @@ Expõe os três endpoints principais consumidos pelo Fastify:
 | `POST /ai/execute` | Executa as tools do plano (consulta slots, cria agendamento etc.) |
 | `POST /ai/reflect` | Avalia a resposta gerada e sugere correções se necessário |
 | `GET /ai/health` | Healthcheck do serviço e do provider de LLM |
+| `GET /ai/memory/{session_id}` | Inspeciona a memoria da sessao (debug/demo) |
+| `DELETE /ai/memory/{session_id}` | Limpa memoria da sessao |
 
 ---
 
@@ -98,12 +100,15 @@ As regras são carregadas por domínio (dental, barbearia etc.) e podem ser defi
 ---
 
 ### `memory/memory_store.py`
-Armazena contexto da conversa para o planner não começar do zero a cada mensagem.
+Armazena contexto da conversa para o planner nao comecar do zero a cada mensagem.
 
-- **Short-term** — histórico da sessão atual (últimas N mensagens)
-- **Long-term** — dados do paciente/cliente já coletados (nome, telefone, preferências)
+- **Short-term** — historico da sessao atual (ultimas N mensagens)
+- **Long-term** — dados do paciente/cliente ja coletados (nome, telefone, preferencias)
 
-Nesta fase a memória fica em RAM (dict por `session_id`). Futuramente migra para Redis ou banco.
+Backends disponiveis:
+
+- `memory` (padrao) — em RAM
+- `sqlite` — persistente em disco via `MEMORY_SQLITE_PATH`
 
 ---
 
@@ -119,11 +124,11 @@ Cada nó do grafo é um módulo isolado. O LangGraph gerencia a transição de e
 ---
 
 ### `guardrails/guardrails.py`
-Última camada antes de devolver a resposta ao usuário. Verifica:
+Ultima camada antes de devolver a resposta ao usuario. Verifica:
 
-- A resposta contém dados sensíveis expostos indevidamente?
-- O modelo alucionou uma tool ou argumento que não existe?
-- A resposta está no idioma e tom corretos para o domínio?
+- A resposta contem dados sensiveis expostos indevidamente?
+- O modelo alucinou uma tool ou argumento que nao existe?
+- A resposta esta no idioma e tom corretos para o dominio?
 
 Se reprovar, retorna ao reflect ou gera uma resposta de fallback segura.
 
@@ -133,7 +138,7 @@ Se reprovar, retorna ao reflect ou gera uma resposta de fallback segura.
 Abstrai o provider de LLM. Troca o backend sem mudar nada no planner ou nas regras.
 
 ```python
-# config via variável de ambiente
+# config via variavel de ambiente
 LLM_PROVIDER=ollama   # padrão — local
 LLM_PROVIDER=openai
 LLM_PROVIDER=claude
@@ -148,11 +153,31 @@ Para Ollama local, aponta para `http://localhost:11434` e usa o modelo configura
 ```
 Fastify (POST /llm/chat/agent)
   └── POST /ai/plan  →  planner → rules
-        ├── faltam dados?  →  devolve pergunta ao usuário
+        ├── faltam dados?  →  devolve pergunta ao usuario
         └── plano completo?
               └── POST /ai/execute  →  tools (slots, bookings…)
                     └── POST /ai/reflect  →  guardrails  →  resposta final
 ```
+
+## Logs
+
+O app aplica middleware HTTP para logar:
+
+- metodo
+- path
+- status
+- tempo total da requisicao (ms)
+
+Isso ajuda em demonstracoes e troubleshooting.
+
+## Variaveis de ambiente
+
+- `LLM_PROVIDER` (default: `ollama`)
+- `OLLAMA_URL` (default: `http://localhost:11434`)
+- `OLLAMA_MODEL` (default: `llama3.1`)
+- `LLM_TIMEOUT_SECONDS` (default: `30`)
+- `MEMORY_BACKEND` (`memory` ou `sqlite`, default: `memory`)
+- `MEMORY_SQLITE_PATH` (default: `./data/memory.db`)
 
 ---
 
