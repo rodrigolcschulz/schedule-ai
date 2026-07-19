@@ -205,6 +205,17 @@ app.get("/llm/tools", async () => ({
   hint: "POST /llm/tools/invoke com { tool, arguments } para testar tools; POST /llm/chat/agent para fluxo completo.",
 }));
 
+app.delete("/llm/memory/:sessionId", async (req, reply) => {
+  const params = z.object({ sessionId: z.string().min(1) }).parse(req.params);
+  try {
+    await aiClient.clearMemory(params.sessionId);
+    return { ok: true, sessionId: params.sessionId };
+  } catch (e) {
+    req.log.error(e);
+    return reply.code(502).send({ error: "python_ai_error", detail: e instanceof Error ? e.message : String(e) });
+  }
+});
+
 const toolInvokeBody = z.object({
   tool: z.string().min(1),
   arguments: z.record(z.string(), z.any()).optional().default({}),

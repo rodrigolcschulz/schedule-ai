@@ -106,6 +106,28 @@ async function postJson<T>(path: string, body: unknown, timeoutMs = 15_000): Pro
   }
 }
 
+async function deleteRequest(path: string, timeoutMs = 10_000): Promise<void> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(`${AI_BASE_URL}${path}`, {
+      method: "DELETE",
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new AiClientError(`python-ai ${path} -> ${res.status}: ${text}`, res.status);
+    }
+  } catch (err) {
+    if (err instanceof AiClientError) throw err;
+    throw new AiClientError(`Falha ao chamar python-ai ${path}: ${(err as Error).message}`);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export const aiClient = {
   plan(req: PlannerRequest): Promise<PlannerResponse> {
     return postJson<PlannerResponse>("/ai/plan", {
@@ -127,5 +149,9 @@ export const aiClient = {
       throw new AiClientError(`python-ai /ai/health -> ${res.status}`, res.status);
     }
     return res.json() as Promise<HealthResponse>;
+  },
+
+  clearMemory(sessionId: string): Promise<void> {
+    return deleteRequest(`/ai/memory/${encodeURIComponent(sessionId)}`);
   },
 };

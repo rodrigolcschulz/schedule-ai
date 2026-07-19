@@ -385,6 +385,33 @@ html, body, #root {
   gap: 0.75rem;
 }
 
+.chat-top-tabs {
+  display: flex;
+  justify-content: flex-start;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 0.35rem;
+  flex-shrink: 0;
+}
+
+.chat-top-tab {
+  background: transparent;
+  color: #0ea5e9;
+  border: 1px solid #bae6fd;
+  border-bottom: 2px solid #0ea5e9;
+  border-radius: 10px 10px 0 0;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.83rem;
+  font-weight: 600;
+}
+
+.chat-top-tab:hover {
+  background: #e0f2fe;
+}
+
+.chat-top-tab:disabled {
+  opacity: 0.6;
+}
+
 .chat-log {
   flex: 1;
   overflow-y: auto;
@@ -409,6 +436,11 @@ html, body, #root {
 
 .chat-error {
   flex-shrink: 0;
+}
+
+.chat-info {
+  flex-shrink: 0;
+  background: #dcfce7;
 }
 
 /* ── Side panel ────────────────────────────────────────────────────────────── */
@@ -499,6 +531,41 @@ html, body, #root {
   flex-direction: column;
   align-items: flex-start;
   gap: 0.1rem;
+}
+
+.slot-row--status {
+  gap: 0.2rem;
+}
+
+.slot-status-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 0.5rem;
+}
+
+.slot-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.1rem 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.slot-badge--free {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.slot-badge--busy {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.slot-summary {
+  margin: 0 0 0.45rem;
 }
 
 .service-row {

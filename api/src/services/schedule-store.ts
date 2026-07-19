@@ -99,7 +99,13 @@ export class ScheduleStore {
 
     await this.ensureSchema();
     const res = await this.pool!.query<{ slot_id: string }>(
-      "SELECT slot_id FROM bookings"
+      `
+      SELECT slot_id
+      FROM bookings
+      UNION
+      SELECT to_char(starts_at AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD_HH24MI') AS slot_id
+      FROM appointments
+      `
     );
     return new Set(res.rows.map((row: { slot_id: string }) => row.slot_id));
   }

@@ -133,18 +133,41 @@ Serviços:
 
 Quando parecer que a conversa ficou "em cache", normalmente e memoria de sessao persistida no python-ai.
 
-### Sessao web (padrao)
+### Sessao web (chat no navegador)
 
-Ver estado atual:
+No frontend, o `session_id` e um UUID salvo em `localStorage` (chave `schedule_ai_chat_session_id`).
+Entao limpar `web-session` nao afeta o chat atual se ele estiver usando outro id.
+
+Pelo backend API (recomendado):
 
 ```powershell
-Invoke-RestMethod -Method Get -Uri "http://localhost:8001/ai/memory/web-session" | ConvertTo-Json -Depth 8
+Invoke-RestMethod -Method Delete -Uri "http://localhost:3001/llm/memory/SEU_SESSION_ID"
 ```
 
-Limpar sessao:
+Ou direto no python-ai:
 
 ```powershell
-Invoke-RestMethod -Method Delete -Uri "http://localhost:8001/ai/memory/web-session"
+Invoke-RestMethod -Method Delete -Uri "http://localhost:8001/ai/memory/SEU_SESSION_ID"
+```
+
+Para obter o id atual no navegador (DevTools Console):
+
+```js
+localStorage.getItem("schedule_ai_chat_session_id")
+```
+
+Se preferir, use o botao **Novo atendimento** na UI do chat para limpar e iniciar sessao nova automaticamente.
+
+Exemplo de verificacao do estado atual:
+
+```powershell
+Invoke-RestMethod -Method Get -Uri "http://localhost:8001/ai/memory/SEU_SESSION_ID" | ConvertTo-Json -Depth 8
+```
+
+Exemplo de limpeza:
+
+```powershell
+Invoke-RestMethod -Method Delete -Uri "http://localhost:8001/ai/memory/SEU_SESSION_ID"
 ```
 
 ### Sessao WhatsApp por telefone

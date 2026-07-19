@@ -245,3 +245,13 @@ export async function fetchLlmChatAgent(
   }
   return r.json() as Promise<{ reply: string; trace?: LlmAgentTrace }>;
 }
+
+export async function clearLlmMemory(sessionId: string): Promise<void> {
+  const r = await fetch(`${writeBase}/llm/memory/${encodeURIComponent(sessionId)}`, {
+    method: "DELETE",
+  });
+  if (!r.ok) {
+    const err = (await r.json().catch(() => ({}))) as { error?: string; detail?: string };
+    throw new Error(err.detail ?? err.error ?? "Falha ao limpar memória da sessão");
+  }
+}

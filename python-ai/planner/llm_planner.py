@@ -131,6 +131,16 @@ class LLMPlanner:
                 insights=[{"intent": "services", "success": request.executeResult.success}],
             )
 
+        if request.plan.intent == "book":
+            slots_reply = self._build_slots_reply(request.executeResult.result)
+            if slots_reply:
+                approved = self.guardrails.validate_reply(slots_reply)
+                return ReflectResponse(
+                    approved=approved,
+                    finalReply=slots_reply if approved else "Desculpe, não consegui listar os horários agora.",
+                    insights=[{"intent": "book", "success": request.executeResult.success}],
+                )
+
         # LLM gera a resposta final em linguagem natural
         session_memory = self.memory_store.get(request.sessionId) if request.sessionId else {}
         context = {
@@ -140,6 +150,9 @@ class LLMPlanner:
         }
         final_reply = self._generate_reply(context)
         approved = self.guardrails.validate_reply(final_reply)
+
+        if request.sessionId and self._should_reset_session_context(request.plan.intent, request.executeResult.result):
+            self.memory_store.clear(request.sessionId)
 
         return ReflectResponse(
             approved=approved,
@@ -395,6 +408,83 @@ Responda APENAS com JSON válido:
             return "\n".join(lines)
         except Exception:
             return "No momento não consegui carregar o catálogo de serviços. Pode tentar novamente em instantes?"
+
+    def _build_slots_reply(self, execute_result: dict) -> Optional[str]:
+        try:
+            tool_results = execute_result.get("toolResults", []) if isinstance(execute_result, dict) else []
+            if not isinstance(tool_results, list):
+                return None
+
+            slots_payload = None
+            for item in tool_results:
+                if not isinstance(item, dict):
+                    continue
+                if item.get("tool") != "list_available_slots":
+                    continue
+                result = item.get("result", {})
+                if isinstance(result, dict) and not result.get("error"):
+                    slots_payload = result
+                    break
+
+            if not isinstance(slots_payload, dict):
+                return None
+
+            date_label = self._format_date_for_user(slots_payload.get("date"))
+
+            morning = slots_payload.get("available_morning_times", [])
+            afternoon = slots_payload.get("available_afternoon_times", [])
+            all_times = slots_payload.get("available_slots", [])
+
+            if not isinstance(morning, list):
+                morning = []
+            if not isinstance(afternoon, list):
+                afternoon = []
+            if not isinstance(all_times, list):
+                all_times = []
+
+            if not morning and not afternoon:
+                # fallback: converte slot_id para HH:MM quando só vier available_slots
+                fallback_times = []
+                for slot_id in all_times:
+                    text = str(slot_id)
+                    if re.fullmatch(r"\d{4}-\d{2}-\d{2}_\d{4}", text):
+                        fallback_times.append(f"{text[11:13]}:{text[13:15]}")
+                fallback_times = sorted(set(fallback_times))
+                if not fallback_times:
+                    return f"No momento não encontrei horários livres em {date_label}. Quer tentar outra data?"
+                times_text = ", ".join(fallback_times)
+                return f"Tenho estes horários livres em {date_label}: {times_text}. Qual você prefere?"
+
+            lines = [f"Tenho estes horários livres em {date_label}:"]
+            if morning:
+                lines.append(f"- Manhã: {', '.join(str(t) for t in morning)}")
+            if afternoon:
+                lines.append(f"- Tarde: {', '.join(str(t) for t in afternoon)}")
+            lines.append("Qual horário você prefere?")
+            return "\n".join(lines)
+        except Exception:
+            return None
+
+    def _should_reset_session_context(self, intent: str, execute_result: dict) -> bool:
+        if intent not in {"book", "cancel"}:
+            return False
+
+        tool_results = execute_result.get("toolResults", []) if isinstance(execute_result, dict) else []
+        if not isinstance(tool_results, list):
+            return False
+
+        expected_tool = "create_booking" if intent == "book" else "delete_booking"
+        for item in tool_results:
+            if not isinstance(item, dict):
+                continue
+            if item.get("tool") != expected_tool:
+                continue
+            result = item.get("result", {})
+            if isinstance(result, dict) and result.get("error"):
+                return False
+            return True
+
+        return False
 
     def _normalize_patient_fields(self, merged: dict, message: str) -> dict:
         normalized = dict(merged)

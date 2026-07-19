@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import {
   cancelBooking,
+  clearLlmMemory,
   fetchApiHealth,
   fetchLlmChatAgent,
   fetchLlmStatus,
@@ -32,6 +33,16 @@ function getOrCreateChatSessionId(): string {
   return generated;
 }
 
+function rotateChatSessionId(): string {
+  if (typeof window === "undefined") return "web-session";
+  const generated =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  window.localStorage.setItem(CHAT_SESSION_STORAGE_KEY, generated);
+  return generated;
+}
+
 function todayYmd(): string {
   const d = new Date();
   return [
@@ -49,6 +60,8 @@ export function App() {
   const [input, setInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
+  const [chatInfo, setChatInfo] = useState<string | null>(null);
+  const [resetLoading, setResetLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   // ── Painel lateral ─────────────────────────────────────────────────────────
@@ -135,6 +148,7 @@ export function App() {
     if (!text || chatLoading) return;
     setInput("");
     setChatError(null);
+    setChatInfo(null);
     const next: ChatTurn[] = [...messages, { role: "user", content: text }];
     setMessages(next);
     setChatLoading(true);
@@ -158,6 +172,25 @@ export function App() {
     }
   }
 
+  async function startNewServiceSession() {
+    if (chatLoading || resetLoading) return;
+
+    setResetLoading(true);
+    setChatError(null);
+    const previousSessionId = sessionIdRef.current;
+
+    try {
+      await clearLlmMemory(previousSessionId);
+    } catch {
+      // Se falhar o clear remoto, ainda trocamos o sessionId para evitar reaproveitar contexto.
+    } finally {
+      sessionIdRef.current = rotateChatSessionId();
+      setMessages([]);
+      setChatInfo("Novo atendimento iniciado. Contexto anterior limpo.");
+      setResetLoading(false);
+    }
+  }
+
   async function onCancel(bookingId: string) {
     setPanelMsg(null);
     try {
@@ -171,6 +204,7 @@ export function App() {
   }
 
   const freeSlots = slots.filter((s) => s.available);
+  const busySlots = slots.filter((s) => !s.available);
 
   return (
     <div className="app-shell">
@@ -220,6 +254,17 @@ export function App() {
       <div className="app-body">
         {/* ── Chat (coluna principal) ──────────────────────────────────────── */}
         <main className="chat-col">
+          <div className="chat-top-tabs">
+            <button
+              type="button"
+              className="chat-top-tab"
+              disabled={chatLoading || resetLoading}
+              onClick={() => void startNewServiceSession()}
+            >
+              {resetLoading ? "Limpando..." : "Novo atendimento"}
+            </button>
+          </div>
+
           <div className="chat-log" id="chat-log">
             {messages.length === 0 && (
               <div className="chat-empty">
@@ -262,6 +307,7 @@ export function App() {
           </div>
 
           {chatError && <p className="banner chat-error">{chatError}</p>}
+          {chatInfo && <p className="banner chat-info">{chatInfo}</p>}
 
           <div className="chat-input-row">
             <textarea
@@ -354,7 +400,7 @@ export function App() {
             </div>
           )}
 
-          {/* Tab: Horários livres */}
+          {/* Tab: Horários */}
           {activeTab === "slots" && (
             <div className="panel-content">
               <div className="panel-actions">
@@ -367,17 +413,27 @@ export function App() {
               </div>
               {panelLoading ? (
                 <p className="muted small">Carregando…</p>
-              ) : freeSlots.length === 0 ? (
-                <p className="muted small">Nenhum horário livre neste dia.</p>
+              ) : slots.length === 0 ? (
+                <p className="muted small">Nenhum horário disponível para este dia.</p>
               ) : (
-                <ul className="panel-list">
-                  {freeSlots.map((s) => (
-                    <li key={s.id} className="panel-item slot-row">
-                      <span>{formatSlotTimeBr(s.startsAt)}</span>
-                      <span className="muted small">{formatSlotDateBr(s.startsAt)}</span>
-                    </li>
-                  ))}
-                </ul>
+                <>
+                  <p className="muted small slot-summary">
+                    Livres: {freeSlots.length} · Ocupados: {busySlots.length}
+                  </p>
+                  <ul className="panel-list">
+                    {slots.map((s) => (
+                      <li key={s.id} className="panel-item slot-row slot-row--status">
+                        <div className="slot-status-line">
+                          <span>{formatSlotTimeBr(s.startsAt)}</span>
+                          <span className={s.available ? "slot-badge slot-badge--free" : "slot-badge slot-badge--busy"}>
+                            {s.available ? "Livre" : "Ocupado"}
+                          </span>
+                        </div>
+                        <span className="muted small">{formatSlotDateBr(s.startsAt)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
               )}
             </div>
           )}
