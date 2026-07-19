@@ -4,6 +4,8 @@ AI Scheduling Assistant para atendimento conversacional e agendamento com tool c
 
 Projeto de demo full-stack orientado a portfólio: API de negócio, serviço de IA desacoplado, UI web, integração WhatsApp stub e execução local com Ollama.
 
+https://github.com/user-attachments/assets/1d8303f6-5cb6-4444-b5ba-3849a673e432
+
 ## Stack
 
 - Fastify + TypeScript (API de domínio)
