@@ -64,7 +64,7 @@ schedule-ai/
 └── docker-compose.yml
 ```
 
-## Documentacao
+## Documentação
 
 - docs/engenharia-ia-conceitos.md
 - docs/postgres-persistence.md
