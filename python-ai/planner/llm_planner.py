@@ -79,15 +79,17 @@ class LLMPlanner:
         if request.sessionId:
             self.memory_store.set(request.sessionId, merged)
 
+        is_availability_check = self._is_availability_question(request.message, intent, merged)
+
         # 4. Descobre campos faltando
-        required = REQUIRED_FIELDS.get(intent, [])
+        required = ["date"] if is_availability_check else REQUIRED_FIELDS.get(intent, [])
         missing = [
             MissingField(**self._missing_field_info(f))
             for f in required if not merged.get(f)
         ]
 
         # 5. Monta steps com args preenchidos
-        steps = self._build_steps(intent, merged)
+        steps = self._build_steps(intent, merged, is_availability_check)
 
         # 6. Valida regras de negócio
         needs_clarification = len(missing) > 0
@@ -131,8 +133,13 @@ class LLMPlanner:
                 insights=[{"intent": "services", "success": request.executeResult.success}],
             )
 
-        if request.plan.intent == "book":
-            slots_reply = self._build_slots_reply(request.executeResult.result)
+        if request.plan.intent == "book" and not self._has_successful_tool_result(request.executeResult.result, "create_booking"):
+            requested_time = None
+            if request.sessionId:
+                memory = self.memory_store.get(request.sessionId)
+                requested_time = memory.get("time") if isinstance(memory, dict) else None
+
+            slots_reply = self._build_slots_reply(request.executeResult.result, requested_time)
             if slots_reply:
                 approved = self.guardrails.validate_reply(slots_reply)
                 return ReflectResponse(
@@ -292,7 +299,7 @@ Responda APENAS com JSON válido:
         }
         return info.get(field, {"field": field, "reason": f"{field} não informado.", "question": f"Qual o {field}?"})
 
-    def _build_steps(self, intent: str, merged: dict) -> list[PlanStep]:
+    def _build_steps(self, intent: str, merged: dict, availability_check: bool = False) -> list[PlanStep]:
         steps = deepcopy(INTENT_STEPS.get(intent, []))
 
         # Fluxo de booking em duas fases:
@@ -303,7 +310,7 @@ Responda APENAS com JSON válido:
             has_time_choice = bool(merged.get("slot_id") or merged.get("time"))
 
             filtered_steps: list[PlanStep] = []
-            if merged.get("date") and not has_time_choice:
+            if merged.get("date") and (availability_check or not has_time_choice):
                 filtered_steps.append(
                     PlanStep(
                         id="slots.list",
@@ -409,7 +416,7 @@ Responda APENAS com JSON válido:
         except Exception:
             return "No momento não consegui carregar o catálogo de serviços. Pode tentar novamente em instantes?"
 
-    def _build_slots_reply(self, execute_result: dict) -> Optional[str]:
+    def _build_slots_reply(self, execute_result: dict, requested_time: Optional[str] = None) -> Optional[str]:
         try:
             tool_results = execute_result.get("toolResults", []) if isinstance(execute_result, dict) else []
             if not isinstance(tool_results, list):
@@ -442,6 +449,41 @@ Responda APENAS com JSON válido:
             if not isinstance(all_times, list):
                 all_times = []
 
+            available_times = []
+            for t in morning:
+                text = str(t).strip()
+                if text:
+                    available_times.append(text)
+            for t in afternoon:
+                text = str(t).strip()
+                if text:
+                    available_times.append(text)
+
+            normalized_available = {
+                self._normalize_time_value(t)
+                for t in available_times
+                if self._normalize_time_value(t)
+            }
+
+            requested_time_normalized = self._normalize_time_value(requested_time) if requested_time else None
+            if requested_time_normalized:
+                requested_label = f"{requested_time_normalized[:2]}:{requested_time_normalized[2:]}"
+                if requested_time_normalized in normalized_available:
+                    return (
+                        f"Sim, {requested_label} está disponível em {date_label}. "
+                        "Se quiser, já posso seguir com o agendamento."
+                    )
+
+                if normalized_available:
+                    ordered = sorted(normalized_available)
+                    alternatives = ", ".join(f"{v[:2]}:{v[2:]}" for v in ordered)
+                    return (
+                        f"Nesse dia, {requested_label} não está disponível. "
+                        f"Tenho estes horários livres em {date_label}: {alternatives}. Qual você prefere?"
+                    )
+
+                return f"Nesse dia, {requested_label} não está disponível e não encontrei outros horários livres em {date_label}."
+
             if not morning and not afternoon:
                 # fallback: converte slot_id para HH:MM quando só vier available_slots
                 fallback_times = []
@@ -464,6 +506,44 @@ Responda APENAS com JSON válido:
             return "\n".join(lines)
         except Exception:
             return None
+
+    def _has_successful_tool_result(self, execute_result: dict, tool_name: str) -> bool:
+        tool_results = execute_result.get("toolResults", []) if isinstance(execute_result, dict) else []
+        if not isinstance(tool_results, list):
+            return False
+
+        for item in tool_results:
+            if not isinstance(item, dict):
+                continue
+            if item.get("tool") != tool_name:
+                continue
+            result = item.get("result", {})
+            if isinstance(result, dict) and result.get("error"):
+                continue
+            return True
+
+        return False
+
+    def _is_availability_question(self, message: str, intent: str, merged: dict) -> bool:
+        if intent != "book":
+            return False
+
+        text = (message or "").strip().lower()
+        asks_availability = any(
+            term in text
+            for term in (
+                "tem vaga",
+                "tem horario",
+                "tem horário",
+                "disponivel",
+                "disponível",
+                "livre",
+            )
+        )
+
+        has_date = bool(merged.get("date"))
+        has_time = bool(merged.get("time") or merged.get("slot_id"))
+        return asks_availability and has_date and has_time
 
     def _should_reset_session_context(self, intent: str, execute_result: dict) -> bool:
         if intent not in {"book", "cancel"}:

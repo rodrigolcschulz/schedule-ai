@@ -12,7 +12,7 @@ https://github.com/user-attachments/assets/1d8303f6-5cb6-4444-b5ba-3849a673e432
 - React + Vite (frontend)
 - FastAPI + Python (planner e orquestração de IA)
 - Ollama (local) + adapter para OpenAI/Claude
-- LangGraph (orquestração de estados)
+- FSM interna (orquestração de estados)
 - Docker Compose
 - PostgreSQL (serviço pronto no compose para evolução de persistência)
 
@@ -31,8 +31,25 @@ https://github.com/user-attachments/assets/1d8303f6-5cb6-4444-b5ba-3849a673e432
 flowchart LR
     W[Web React] --> A[API Fastify TypeScript]
     A --> P[Python AI FastAPI]
-    P --> C[Planner Rules Guardrails Memory LangGraph]
+    P --> C[Planner Rules Guardrails Memory FSM]
     C --> L[Provider Adapter Ollama OpenAI Claude]
+```
+
+## Fluxo Plan-Execute-Reflect
+
+Resumo visual do ciclo principal do agente:
+
+- Plan: o Python AI interpreta a mensagem e monta o plano (intencao, campos faltantes e passos).
+- Execute: a API Fastify executa as tools de dominio (slots, bookings, appointments) com regras de negocio.
+- Reflect: o Python AI valida o resultado, aplica guardrails e devolve a resposta final.
+
+```mermaid
+flowchart LR
+    U[Mensagem do usuario] --> P[Plan em /ai/plan]
+    P -->|faltam dados| Q[Pergunta objetiva]
+    P -->|plano completo| E[Execute no dominio Fastify]
+    E --> R[Reflect em /ai/reflect]
+    R --> A[Resposta final aprovada]
 ```
 
 ## Estrutura principal
@@ -50,8 +67,6 @@ schedule-ai/
 ## Documentacao
 
 - docs/engenharia-ia-conceitos.md
-- docs/demo.md
-- docs/demo-fala.md
 - docs/postgres-persistence.md
 
 ## Endpoints principais
@@ -238,8 +253,6 @@ sequenceDiagram
         A-->>W: suggestedReply (pergunta objetiva)
         W-->>U: Pedido de dado faltante
     else Plano completo
-        A->>P: POST /ai/execute
-        P-->>A: Execucao validada
         A->>D: Executa tools do dominio
         D-->>A: Resultado
         A->>P: POST /ai/reflect

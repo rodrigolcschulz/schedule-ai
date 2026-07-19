@@ -33,7 +33,7 @@ python-ai/
 │
 ├── graph/
 │   ├── __init__.py
-│   └── state_machine.py           # Orquestração do fluxo com LangGraph
+│   └── state_machine.py           # Maquina de estados interna (FSM)
 │
 ├── guardrails/
 │   ├── __init__.py
@@ -54,7 +54,7 @@ Expõe os três endpoints principais consumidos pelo Fastify:
 | Endpoint | Função |
 |---|---|
 | `POST /ai/plan` | Recebe mensagem + contexto, devolve um plano estruturado |
-| `POST /ai/execute` | Executa as tools do plano (consulta slots, cria agendamento etc.) |
+| `POST /ai/execute` | Valida o plano com guardrails antes da execução de tools no Fastify |
 | `POST /ai/reflect` | Avalia a resposta gerada e sugere correções se necessário |
 | `GET /ai/health` | Healthcheck do serviço e do provider de LLM |
 | `GET /ai/memory/{session_id}` | Inspeciona a memoria da sessao (debug/demo) |
@@ -113,13 +113,13 @@ Backends disponiveis:
 ---
 
 ### `graph/state_machine.py`
-Orquestra o fluxo completo usando LangGraph:
+Define uma maquina de estados interna para o fluxo do agente:
 
 ```
 mensagem → planner → rules → [clarificação?] → execute → reflect → resposta
 ```
 
-Cada nó do grafo é um módulo isolado. O LangGraph gerencia a transição de estado e permite loops (ex: pedir clarificação e voltar ao planner com a resposta).
+As transições são implementadas em código Python (sem dependência externa de LangGraph), com histórico de estados para auditoria e debug.
 
 ---
 
@@ -155,7 +155,7 @@ Fastify (POST /llm/chat/agent)
   └── POST /ai/plan  →  planner → rules
         ├── faltam dados?  →  devolve pergunta ao usuario
         └── plano completo?
-              └── POST /ai/execute  →  tools (slots, bookings…)
+              └── Fastify executa tools do dominio (slots, bookings…)
                     └── POST /ai/reflect  →  guardrails  →  resposta final
 ```
 
