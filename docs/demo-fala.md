@@ -20,11 +20,10 @@ Passar tres mensagens em ordem:
 
 ### 0s a 15s - Abertura
 
-"Fala pessoal! Sou Rodrigo Schulz, trabalho com IA e Dados, e vou apresentar a vocês a demonstração de um assistente de agendamento odontológico, com foco em Engenharia de IA aplicada. Não é só um chat respondendo texto: ele planeja, executa tools de negócio e reflete o resultado antes de responder ao usuário."
+"Fala pessoal! Sou Rodrigo Schulz, trabalho com IA e Dados, e vou apresentar a vocês uma demonstração de agendamento odontológico, com foco em Engenharia de IA aplicada. Não é só um chat respondendo texto: ele planeja, executa tools de negócio e reflete o resultado antes de responder ao usuário."
 
 ### 15s a 35s - Arquitetura
 
-Apresenta pelo chat a demonstração.
 "A arquitetura é separada em camadas: web em React, API em Fastify, e um serviço Python para o núcleo de IA. Esse núcleo usa planner, regras, guardrails e memória de sessao.
 
 ### 35s a 65s - Plan
@@ -46,11 +45,3 @@ Apresenta pelo chat a demonstração.
 - Enquanto fala de arquitetura, deixe o diagrama na tela.
 - Enquanto fala de plan/execute/reflect, mostre o fluxo no README.
 - Enquanto fala de prova, mostre chat + banco na sequencia.
-
-## Checklist rapido antes de gravar
-
-- Sessao de memoria limpa para demo consistente.
-- Caso de uso ensaiado com entradas curtas.
-- Uma tomada mostrando IDE (arquitetura e fluxo).
-- Uma tomada mostrando UX (chat fim a fim).
-- Uma tomada mostrando prova de persistencia.
