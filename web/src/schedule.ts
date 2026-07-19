@@ -12,6 +12,12 @@ export function formatSlotTimeBr(isoUtc: string): string {
   });
 }
 
+export function formatSlotDateBr(isoUtc: string): string {
+  return new Date(isoUtc).toLocaleDateString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+  });
+}
+
 export function formatBookingWhenBr(isoUtc: string): string {
   const d = new Date(isoUtc);
   return d.toLocaleString("pt-BR", {

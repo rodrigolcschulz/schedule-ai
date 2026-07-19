@@ -1,5 +1,6 @@
 # python-ai/rules/rules_engine.py
 from datetime import datetime, time
+import re
 from contracts.planner import PlannerResponse, RuleCheckResponse
 
 # Configuração da clínica — futuramente vem do domínio/banco
@@ -43,10 +44,9 @@ class RuleEngine:
         date_str = self._get_arg(plan, "date")
         if not date_str:
             return []  # campo faltando já é tratado pelo planner
-        try:
-            date = datetime.strptime(date_str, "%Y-%m-%d").date()
-        except ValueError:
-            return [f"Data '{date_str}' em formato inválido. Use YYYY-MM-DD."]
+        date = self._parse_date(str(date_str))
+        if not date:
+            return [f"Data '{date_str}' em formato inválido. Use DD/MM/AAAA."]
         if date < datetime.now().date():
             return ["Não é possível agendar em uma data passada."]
         return []
@@ -55,15 +55,25 @@ class RuleEngine:
         date_str = self._get_arg(plan, "date")
         if not date_str:
             return []
-        try:
-            date = datetime.strptime(date_str, "%Y-%m-%d").date()
-        except ValueError:
+        date = self._parse_date(str(date_str))
+        if not date:
             return []
         hours = BUSINESS_HOURS.get(date.weekday())
         if hours is None:
             day_name = ["segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo"][date.weekday()]
             return [f"A clínica não atende aos {day_name}s."]
         return []
+
+    def _parse_date(self, raw: str):
+        text = raw.strip().lower()
+        text = re.sub(r"\b(dia|data)\b", "", text).strip()
+
+        for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d/%m/%y"):
+            try:
+                return datetime.strptime(text, fmt).date()
+            except ValueError:
+                continue
+        return None
 
     def _check_required_args(self, plan: PlannerResponse) -> list[str]:
         """Garante que create_booking tem todos os args antes de executar."""

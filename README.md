@@ -25,12 +25,12 @@ Projeto de demo full-stack orientado a portfólio: API de negócio, serviço de 
 
 ## Arquitetura
 
-```text
-Web (React)
-  -> API (Fastify / TypeScript)
-      -> Python AI (FastAPI)
-          -> Planner + Rules + Guardrails + Memory + LangGraph
-              -> Provider Adapter (Ollama/OpenAI/Claude)
+```mermaid
+flowchart LR
+    W[Web React] --> A[API Fastify TypeScript]
+    A --> P[Python AI FastAPI]
+    P --> C[Planner Rules Guardrails Memory LangGraph]
+    C --> L[Provider Adapter Ollama OpenAI Claude]
 ```
 
 ## Estrutura principal
@@ -44,6 +44,13 @@ schedule-ai/
 ├── docker/
 └── docker-compose.yml
 ```
+
+## Documentacao
+
+- docs/engenharia-ia-conceitos.md
+- docs/demo.md
+- docs/demo-fala.md
+- docs/postgres-persistence.md
 
 ## Endpoints principais
 
@@ -122,6 +129,46 @@ Serviços:
 - Python AI: http://localhost:8001
 - PostgreSQL: localhost:5432
 
+## Refresh de sessao e memoria (PowerShell)
+
+Quando parecer que a conversa ficou "em cache", normalmente e memoria de sessao persistida no python-ai.
+
+### Sessao web (padrao)
+
+Ver estado atual:
+
+```powershell
+Invoke-RestMethod -Method Get -Uri "http://localhost:8001/ai/memory/web-session" | ConvertTo-Json -Depth 8
+```
+
+Limpar sessao:
+
+```powershell
+Invoke-RestMethod -Method Delete -Uri "http://localhost:8001/ai/memory/web-session"
+```
+
+### Sessao WhatsApp por telefone
+
+Formato do session_id: `wa:SEU_NUMERO`
+
+Exemplo para 47933857058:
+
+```powershell
+Invoke-RestMethod -Method Get -Uri "http://localhost:8001/ai/memory/wa%3A47933857058" | ConvertTo-Json -Depth 8
+Invoke-RestMethod -Method Delete -Uri "http://localhost:8001/ai/memory/wa%3A47933857058"
+```
+
+### Rebuild quando houver alteracao de codigo
+
+```bash
+docker compose up -d --build python-ai api
+```
+
+Observacoes:
+
+- Nao cole links formatados pelo editor (ex.: markdown/vscode). Use sempre URL HTTP pura no parametro `-Uri`.
+- `docker compose down -v` apaga volumes (incluindo dados de banco e memoria sqlite). Use somente quando quiser reset total.
+
 ## Variáveis importantes
 
 ### API
@@ -148,6 +195,34 @@ Serviços:
 3. Se faltam dados, retorna pergunta objetiva para completar campos.
 4. Se o plano está completo, API executa tools no domínio.
 5. Python AI faz reflexão em POST /ai/reflect e devolve resposta final.
+
+```mermaid
+sequenceDiagram
+    participant U as Usuario
+    participant W as Web
+    participant A as API Fastify
+    participant P as Python AI
+    participant D as Domain Tools
+
+    U->>W: Envia mensagem
+    W->>A: POST /llm/chat/agent
+    A->>P: POST /ai/plan
+    P-->>A: PlannerResponse
+
+    alt Campos faltando
+        A-->>W: suggestedReply (pergunta objetiva)
+        W-->>U: Pedido de dado faltante
+    else Plano completo
+        A->>P: POST /ai/execute
+        P-->>A: Execucao validada
+        A->>D: Executa tools do dominio
+        D-->>A: Resultado
+        A->>P: POST /ai/reflect
+        P-->>A: Resposta final aprovada
+        A-->>W: Mensagem final
+        W-->>U: Entrega da resposta
+    end
+```
 
 ## Agenda e bookings no PostgreSQL
 

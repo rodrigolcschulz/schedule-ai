@@ -210,10 +210,40 @@ export async function executeDentalTool(
 
       case "create_appointment":
       case "create_booking": {
-        const slotId = asStr(args.slot_id) ? normalizeSlotId(asStr(args.slot_id)!) : undefined;
-        const patientName = asStr(args.patient_name);
+        const rawSlotId = asStr(args.slot_id);
+        const dateFromArgs = asStr(args.date);
+        const timeFromArgs = asStr(args.time) ?? asStr(args.hour);
+
+        const normalizedDate = dateFromArgs ? normalizeDateInput(dateFromArgs) : undefined;
+        const normalizedTime =
+          timeFromArgs &&
+          /^\s*(\d{1,2})(?:\s*(?::|h)\s*(\d{2})?)?(?:\s*horas?)?\s*$/i.test(timeFromArgs.trim())
+            ? (() => {
+                const m = /^\s*(\d{1,2})(?:\s*(?::|h)\s*(\d{2})?)?(?:\s*horas?)?\s*$/i.exec(
+                  timeFromArgs.trim()
+                );
+                if (!m) return undefined;
+                const hour = Number(m[1]);
+                const minute = Number(m[2] ?? "00");
+                if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return undefined;
+                return `${hour.toString().padStart(2, "0")}${minute.toString().padStart(2, "0")}`;
+              })()
+            : undefined;
+
+        const computedSlotId =
+          !rawSlotId && normalizedDate && normalizedTime
+            ? `${normalizedDate}_${normalizedTime}`
+            : undefined;
+
+        const slotId = rawSlotId
+          ? normalizeSlotId(rawSlotId)
+          : computedSlotId
+            ? normalizeSlotId(computedSlotId)
+            : undefined;
+
+        const patientName = asStr(args.patient_name) ?? asStr(args.name);
         const phone = args.phone != null ? normPhone(String(args.phone)) : "";
-        const serviceRaw = asStr(args.service_id);
+        const serviceRaw = asStr(args.service_id) ?? asStr(args.service);
         const serviceId = serviceRaw ? resolveServiceId(serviceRaw) : undefined;
         const notes = asStr(args.notes);
 

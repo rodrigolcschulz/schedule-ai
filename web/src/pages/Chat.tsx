@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import {
   cancelBooking,
+  fetchApiHealth,
   fetchLlmChatAgent,
   fetchLlmStatus,
   fetchServices,
@@ -12,9 +13,24 @@ import {
   type LlmStatus,
   type SlotRow,
 } from "../api";
-import { formatBookingWhenBr, formatSlotTimeBr } from "../schedule";
+import { formatBookingWhenBr, formatSlotDateBr, formatSlotTimeBr } from "../schedule";
 
 type ChatTurn = { role: "user" | "assistant"; content: string };
+const CHAT_SESSION_STORAGE_KEY = "schedule_ai_chat_session_id";
+
+function getOrCreateChatSessionId(): string {
+  if (typeof window === "undefined") return "web-session";
+  const existing = window.localStorage.getItem(CHAT_SESSION_STORAGE_KEY);
+  if (existing) return existing;
+
+  const generated =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  window.localStorage.setItem(CHAT_SESSION_STORAGE_KEY, generated);
+  return generated;
+}
 
 function todayYmd(): string {
   const d = new Date();
@@ -28,6 +44,7 @@ function todayYmd(): string {
 export function App() {
   // ── LLM ────────────────────────────────────────────────────────────────────
   const [status, setStatus] = useState<LlmStatus | null>(null);
+  const [apiReachable, setApiReachable] = useState<boolean | null>(null);
   const [messages, setMessages] = useState<ChatTurn[]>([]);
   const [input, setInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
@@ -36,6 +53,8 @@ export function App() {
 
   // ── Painel lateral ─────────────────────────────────────────────────────────
   const [services, setServices] = useState<DentalService[]>([]);
+  const [servicesLoading, setServicesLoading] = useState(false);
+  const [servicesError, setServicesError] = useState<string | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [slots, setSlots] = useState<SlotRow[]>([]);
   const [date, setDate] = useState(todayYmd);
@@ -44,27 +63,64 @@ export function App() {
   const [activeTab, setActiveTab] = useState<"appointments" | "services" | "slots">(
     "appointments"
   );
+  const sessionIdRef = useRef<string>(getOrCreateChatSessionId());
 
   // ── Load data ───────────────────────────────────────────────────────────────
   const loadStatus = useCallback(async () => {
-    try { setStatus(await fetchLlmStatus()); } catch { setStatus(null); }
+    const [llmResult, apiResult] = await Promise.allSettled([
+      fetchLlmStatus(),
+      fetchApiHealth(),
+    ]);
+
+    if (llmResult.status === "fulfilled") setStatus(llmResult.value);
+    else setStatus(null);
+
+    if (apiResult.status === "fulfilled") setApiReachable(apiResult.value);
+    else setApiReachable(false);
   }, []);
 
   const loadServices = useCallback(async () => {
-    try { setServices(await fetchServices()); } catch { /* silencioso */ }
+    setServicesLoading(true);
+    setServicesError(null);
+    try {
+      setServices(await fetchServices());
+    } catch (e) {
+      setServices([]);
+      setServicesError(e instanceof Error ? e.message : "Erro ao carregar serviços");
+    } finally {
+      setServicesLoading(false);
+    }
   }, []);
 
   const loadAppointments = useCallback(async () => {
-    try { setAppointments(await listAppointments()); } catch { /* silencioso */ }
+    try {
+      setAppointments(await listAppointments());
+      setPanelMsg(null);
+    } catch (e) {
+      setAppointments([]);
+      setPanelMsg(e instanceof Error ? e.message : "Erro ao carregar consultas");
+    }
   }, []);
 
   const loadSlots = useCallback(async () => {
     setPanelLoading(true);
-    try { setSlots(await fetchSlots(date)); } catch { /* silencioso */ }
+    try {
+      setSlots(await fetchSlots(date));
+      setPanelMsg(null);
+    } catch (e) {
+      setSlots([]);
+      setPanelMsg(e instanceof Error ? e.message : "Erro ao carregar horários");
+    }
     finally { setPanelLoading(false); }
   }, [date]);
 
   useEffect(() => { void loadStatus(); }, [loadStatus]);
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      void loadStatus();
+    }, 30_000);
+    return () => window.clearInterval(intervalId);
+  }, [loadStatus]);
   useEffect(() => { void loadServices(); }, [loadServices]);
   useEffect(() => { void loadAppointments(); }, [loadAppointments]);
   useEffect(() => { void loadSlots(); }, [loadSlots]);
@@ -83,7 +139,9 @@ export function App() {
     setMessages(next);
     setChatLoading(true);
     try {
-      const { reply, trace } = await fetchLlmChatAgent(next);
+      const { reply, trace } = await fetchLlmChatAgent(next, {
+        sessionId: sessionIdRef.current,
+      });
       if (trace?.length) {
         // Recarrega o painel lateral após execução de tools para manter dados sincronizados.
         const hasSuccessfulTool = trace.some((t: { tool: string; ok: boolean }) => t.ok);
@@ -125,15 +183,35 @@ export function App() {
               Assistente IA · Agendamento · Serviços
             </p>
           </div>
-          <div className="status-badge">
-            <span
-              className={status?.ollamaReachable ? "dot dot--green" : "dot dot--red"}
-            />
-            <span className="muted small">
-              {status?.ollamaReachable
-                ? `IA online · ${status.model}`
-                : "IA indisponível"}
-            </span>
+          <div className="status-stack">
+            <div className="status-badge">
+              <span
+                className={status?.ollamaReachable ? "dot dot--green" : "dot dot--red"}
+              />
+              <span className="muted small">
+                {status?.ollamaReachable
+                  ? `IA online · ${status.model}`
+                  : "IA indisponível"}
+              </span>
+            </div>
+            <div className="status-badge">
+              <span
+                className={
+                  apiReachable === null
+                    ? "dot dot--amber"
+                    : apiReachable
+                      ? "dot dot--green"
+                      : "dot dot--red"
+                }
+              />
+              <span className="muted small">
+                {apiReachable === null
+                  ? "API verificando..."
+                  : apiReachable
+                    ? "API conectada"
+                    : "API indisponível"}
+              </span>
+            </div>
           </div>
         </div>
       </header>
@@ -226,7 +304,7 @@ export function App() {
             <button
               type="button"
               className={activeTab === "services" ? "tab tab--active" : "tab"}
-              onClick={() => setActiveTab("services")}
+              onClick={() => { setActiveTab("services"); void loadServices(); }}
             >
               Serviços
             </button>
@@ -296,7 +374,7 @@ export function App() {
                   {freeSlots.map((s) => (
                     <li key={s.id} className="panel-item slot-row">
                       <span>{formatSlotTimeBr(s.startsAt)}</span>
-                      <span className="muted small">{s.id}</span>
+                      <span className="muted small">{formatSlotDateBr(s.startsAt)}</span>
                     </li>
                   ))}
                 </ul>
@@ -307,6 +385,22 @@ export function App() {
           {/* Tab: Serviços */}
           {activeTab === "services" && (
             <div className="panel-content">
+              <div className="panel-actions">
+                <button
+                  type="button"
+                  className="ghost small-btn"
+                  onClick={() => void loadServices()}
+                >
+                  Atualizar
+                </button>
+              </div>
+              {servicesLoading ? (
+                <p className="muted small">Carregando serviços…</p>
+              ) : servicesError ? (
+                <p className="muted small">{servicesError}</p>
+              ) : services.length === 0 ? (
+                <p className="muted small">Nenhum serviço disponível no catálogo.</p>
+              ) : (
               <ul className="panel-list">
                 {services.map((s) => (
                   <li key={s.id} className="panel-item service-row">
@@ -323,6 +417,7 @@ export function App() {
                   </li>
                 ))}
               </ul>
+              )}
             </div>
           )}
         </aside>
