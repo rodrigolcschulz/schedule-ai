@@ -1,4 +1,5 @@
 import Fastify from "fastify";
+import type { FastifyReply, FastifyRequest } from "fastify";
 import cors from "@fastify/cors";
 import { z } from "zod";
 import { createWhatsAppProvider, type WhatsAppProviderKind } from "./whatsapp/factory.js";
@@ -6,7 +7,7 @@ import type { StubWhatsAppProvider } from "./whatsapp/stub-provider.js";
 import { dentalDomain } from "./domains/dental/index.js";
 import type { DomainContext } from "./domains/types.js";
 import { runAgent } from "./services/run-agent.js";
-import { aiClient, type ToolExecutionRecord } from "./services/ai-client.js";
+import { aiClient, AiClientError, type ToolExecutionRecord } from "./services/ai-client.js";
 
 const domain = dentalDomain;
 const ctx: DomainContext = domain.createContext();
@@ -46,6 +47,88 @@ wa.onMessage(async (msg) => {
 
 const app = Fastify({ logger: true });
 await app.register(cors, { origin: true });
+
+app.addHook("onRequest", async (req, reply) => {
+  const incomingCorrelationId = req.headers["x-correlation-id"];
+  const correlationId =
+    typeof incomingCorrelationId === "string" && incomingCorrelationId.trim().length > 0
+      ? incomingCorrelationId.trim()
+      : req.id;
+
+  req.correlationId = correlationId;
+  reply.header("x-correlation-id", correlationId);
+});
+
+type ApiErrorType = "validation_error" | "upstream_ai_error" | "tool_execution_error" | "internal_error";
+
+const PLAN_TIMEOUT_MS = Number(process.env.AI_PLAN_TIMEOUT_MS ?? 12_000);
+const REFLECT_TIMEOUT_MS = Number(process.env.AI_REFLECT_TIMEOUT_MS ?? 12_000);
+const AI_RETRIES = Number(process.env.AI_HTTP_RETRIES ?? 1);
+
+const hardeningStats = {
+  startedAt: new Date().toISOString(),
+  requests: {
+    llmChat: 0,
+    llmChatAgent: 0,
+    llmPlanner: 0,
+  },
+  errorsByType: {
+    validation_error: 0,
+    upstream_ai_error: 0,
+    tool_execution_error: 0,
+    internal_error: 0,
+  } as Record<ApiErrorType, number>,
+};
+
+function markError(type: ApiErrorType) {
+  hardeningStats.errorsByType[type] += 1;
+}
+
+function sendApiError(
+  req: FastifyRequest,
+  reply: FastifyReply,
+  statusCode: number,
+  type: ApiErrorType,
+  message: string,
+  detail?: string,
+) {
+  markError(type);
+  req.log.error(
+    {
+      event: "api.error",
+      correlationId: req.correlationId,
+      errorType: type,
+      statusCode,
+      detail,
+    },
+    message,
+  );
+
+  return reply.code(statusCode).send({
+    error: {
+      type,
+      message,
+      correlationId: req.correlationId,
+    },
+  });
+}
+
+app.get("/llm/hardening/stats", async () => {
+  const startedAt = new Date(hardeningStats.startedAt).getTime();
+  const uptimeMs = Math.max(0, Date.now() - startedAt);
+
+  return {
+    startedAt: hardeningStats.startedAt,
+    uptimeMs,
+    timeouts: {
+      planTimeoutMs: PLAN_TIMEOUT_MS,
+      reflectTimeoutMs: REFLECT_TIMEOUT_MS,
+      retries: AI_RETRIES,
+    },
+    requests: hardeningStats.requests,
+    errorsByType: hardeningStats.errorsByType,
+  };
+});
 
 app.get("/health", async () => ({ ok: true }));
 
@@ -208,7 +291,10 @@ app.get("/llm/tools", async () => ({
 app.delete("/llm/memory/:sessionId", async (req, reply) => {
   const params = z.object({ sessionId: z.string().min(1) }).parse(req.params);
   try {
-    await aiClient.clearMemory(params.sessionId);
+    await aiClient.clearMemory(params.sessionId, {
+      correlationId: req.correlationId,
+      timeoutMs: 10_000,
+    });
     return { ok: true, sessionId: params.sessionId };
   } catch (e) {
     req.log.error(e);
@@ -234,40 +320,74 @@ const plannerBody = z.object({
 });
 
 app.post("/llm/planner", async (req, reply) => {
-  const body = plannerBody.parse(req.body);
+  hardeningStats.requests.llmPlanner += 1;
   try {
+    const body = plannerBody.parse(req.body);
     const plan = await aiClient.plan({
       message: body.message,
       history: [],
       domainId: domain.id,
       sessionId: body.phone ?? "planner-session",
+    }, {
+      correlationId: req.correlationId,
+      timeoutMs: PLAN_TIMEOUT_MS,
+      retries: AI_RETRIES,
     });
     return { plan };
   } catch (e) {
-    req.log.error(e);
-    return reply.code(502).send({ error: "python_ai_error", detail: e instanceof Error ? e.message : String(e) });
+    if (e instanceof z.ZodError) {
+      return sendApiError(req, reply, 400, "validation_error", "Payload invalido para /llm/planner", e.message);
+    }
+    if (e instanceof AiClientError) {
+      return sendApiError(req, reply, 502, "upstream_ai_error", "Falha ao consultar planner de IA", e.message);
+    }
+    return sendApiError(req, reply, 500, "internal_error", "Erro interno ao processar /llm/planner", e instanceof Error ? e.message : String(e));
   }
 });
 
 async function executePlanSteps(
+  req: FastifyRequest,
   steps: Array<{ toolName: string; toolArgs: Record<string, unknown> }>
 ): Promise<ToolExecutionRecord[]> {
   const toolResults: ToolExecutionRecord[] = [];
 
   for (const step of steps) {
+    const toolStarted = performance.now();
     try {
       const outcome = await domain.executeTool(step.toolName, step.toolArgs, ctx);
+      const elapsedMs = Number((performance.now() - toolStarted).toFixed(2));
       toolResults.push({
         tool: step.toolName,
         args: step.toolArgs,
         result: outcome.ok ? outcome.result : { error: outcome.error },
       });
+      req.log.info(
+        {
+          event: "agent.execute.tool",
+          correlationId: req.correlationId,
+          toolName: step.toolName,
+          success: outcome.ok,
+          elapsedMs,
+        },
+        "Tool execution finished",
+      );
     } catch (err) {
+      const elapsedMs = Number((performance.now() - toolStarted).toFixed(2));
       toolResults.push({
         tool: step.toolName,
         args: step.toolArgs,
         result: { error: err instanceof Error ? err.message : "execute_failed" },
       });
+      req.log.error(
+        {
+          event: "agent.execute.tool",
+          correlationId: req.correlationId,
+          toolName: step.toolName,
+          success: false,
+          elapsedMs,
+        },
+        "Tool execution failed",
+      );
     }
   }
 
@@ -275,37 +395,94 @@ async function executePlanSteps(
 }
 
 app.post("/llm/chat", async (req, reply) => {
-  const body = llmChatBody.parse(req.body);
+  hardeningStats.requests.llmChat += 1;
+  const started = performance.now();
   try {
+    const body = llmChatBody.parse(req.body);
     const lastUserMessage = [...body.messages].reverse().find((m) => m.role === "user")?.content ?? "";
     const sessionId = body.sessionId ?? "web-session";
-    const out = await runAgent(domain, lastUserMessage, body.messages, sessionId, ctx);
+    const out = await runAgent(domain, lastUserMessage, body.messages, sessionId, ctx, req.correlationId);
+    req.log.info(
+      {
+        event: "agent.total",
+        correlationId: req.correlationId,
+        endpoint: "/llm/chat",
+        elapsedMs: Number((performance.now() - started).toFixed(2)),
+      },
+      "Agent flow finished",
+    );
     return { reply: out };
   } catch (e) {
-    req.log.error(e);
-    return reply.code(502).send({ error: "python_ai_error", detail: e instanceof Error ? e.message : String(e) });
+    if (e instanceof z.ZodError) {
+      return sendApiError(req, reply, 400, "validation_error", "Payload invalido para /llm/chat", e.message);
+    }
+    if (e instanceof AiClientError) {
+      return sendApiError(req, reply, 502, "upstream_ai_error", "Falha ao consultar servico de IA", e.message);
+    }
+    return sendApiError(req, reply, 500, "internal_error", "Erro interno ao processar /llm/chat", e instanceof Error ? e.message : String(e));
   }
 });
 
 app.post("/llm/chat/agent", async (req, reply) => {
-  const body = llmChatBody.parse(req.body);
+  hardeningStats.requests.llmChatAgent += 1;
+  const totalStarted = performance.now();
   try {
+    const body = llmChatBody.parse(req.body);
     const lastUserMessage = [...body.messages].reverse().find((m) => m.role === "user")?.content ?? "";
     const sessionId = body.sessionId ?? "web-session";
 
+    const planStarted = performance.now();
     const plan = await aiClient.plan({
       message: lastUserMessage,
       history: body.messages,
       domainId: domain.id,
       sessionId,
+    }, {
+      correlationId: req.correlationId,
+      timeoutMs: PLAN_TIMEOUT_MS,
+      retries: AI_RETRIES,
     });
+    const planElapsed = Number((performance.now() - planStarted).toFixed(2));
+    req.log.info(
+      {
+        event: "agent.plan",
+        correlationId: req.correlationId,
+        intent: plan.intent,
+        needsClarification: plan.needsClarification,
+        missingFields: plan.missingFields.length,
+        elapsedMs: planElapsed,
+      },
+      "Plan stage finished",
+    );
 
     if (plan.needsClarification || plan.missingFields.length > 0) {
+      req.log.info(
+        {
+          event: "agent.total",
+          correlationId: req.correlationId,
+          endpoint: "/llm/chat/agent",
+          status: "clarification",
+          elapsedMs: Number((performance.now() - totalStarted).toFixed(2)),
+        },
+        "Agent flow finished",
+      );
       return { reply: plan.suggestedReply, trace: [], plan };
     }
 
+    const executeStarted = performance.now();
     const toolResults = await executePlanSteps(
+      req,
       plan.steps.map((s) => ({ toolName: s.toolName, toolArgs: s.toolArgs }))
+    );
+    const executeElapsed = Number((performance.now() - executeStarted).toFixed(2));
+    req.log.info(
+      {
+        event: "agent.execute",
+        correlationId: req.correlationId,
+        steps: plan.steps.length,
+        elapsedMs: executeElapsed,
+      },
+      "Execute stage finished",
     );
 
     const hasToolError = toolResults.some(
@@ -315,6 +492,26 @@ app.post("/llm/chat/agent", async (req, reply) => {
         "error" in (entry.result as Record<string, unknown>)
     );
 
+    if (hasToolError) {
+      markError("tool_execution_error");
+      req.log.warn(
+        {
+          event: "agent.execute.error",
+          correlationId: req.correlationId,
+          errors: toolResults
+            .filter(
+              (entry) =>
+                typeof entry.result === "object" &&
+                entry.result !== null &&
+                "error" in (entry.result as Record<string, unknown>)
+            )
+            .length,
+        },
+        "Tool execution returned one or more errors",
+      );
+    }
+
+    const reflectStarted = performance.now();
     const reflected = await aiClient.reflect({
       plan,
       executeResult: {
@@ -323,9 +520,33 @@ app.post("/llm/chat/agent", async (req, reply) => {
         ...(hasToolError ? { error: "tool_execution_failed" } : {}),
       },
       sessionId,
+    }, {
+      correlationId: req.correlationId,
+      timeoutMs: REFLECT_TIMEOUT_MS,
+      retries: AI_RETRIES,
     });
+    const reflectElapsed = Number((performance.now() - reflectStarted).toFixed(2));
+    req.log.info(
+      {
+        event: "agent.reflect",
+        correlationId: req.correlationId,
+        approved: reflected.approved,
+        elapsedMs: reflectElapsed,
+      },
+      "Reflect stage finished",
+    );
 
     if (!reflected.approved) {
+      req.log.warn(
+        {
+          event: "agent.total",
+          correlationId: req.correlationId,
+          endpoint: "/llm/chat/agent",
+          status: "not_approved",
+          elapsedMs: Number((performance.now() - totalStarted).toFixed(2)),
+        },
+        "Agent flow finished with non approved reflection",
+      );
       return {
         reply: "Desculpe, não consegui processar sua solicitação agora. Pode tentar de outro jeito?",
         trace: toolResults,
@@ -333,10 +554,26 @@ app.post("/llm/chat/agent", async (req, reply) => {
       };
     }
 
+    req.log.info(
+      {
+        event: "agent.total",
+        correlationId: req.correlationId,
+        endpoint: "/llm/chat/agent",
+        status: "ok",
+        elapsedMs: Number((performance.now() - totalStarted).toFixed(2)),
+      },
+      "Agent flow finished",
+    );
+
     return { reply: reflected.finalReply, trace: toolResults, plan };
   } catch (e) {
-    req.log.error(e);
-    return reply.code(502).send({ error: "python_ai_error", detail: e instanceof Error ? e.message : String(e) });
+    if (e instanceof z.ZodError) {
+      return sendApiError(req, reply, 400, "validation_error", "Payload invalido para /llm/chat/agent", e.message);
+    }
+    if (e instanceof AiClientError) {
+      return sendApiError(req, reply, 502, "upstream_ai_error", "Falha ao consultar servico de IA", e.message);
+    }
+    return sendApiError(req, reply, 500, "internal_error", "Erro interno ao processar /llm/chat/agent", e instanceof Error ? e.message : String(e));
   }
 });
 

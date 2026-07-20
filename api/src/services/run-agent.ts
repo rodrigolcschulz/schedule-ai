@@ -7,12 +7,17 @@
 import type { BusinessDomain, DomainContext } from "../domains/types.js";
 import { aiClient, type ChatMessage, type ToolExecutionRecord } from "./ai-client.js";
 
+const PLAN_TIMEOUT_MS = Number(process.env.AI_PLAN_TIMEOUT_MS ?? 12_000);
+const REFLECT_TIMEOUT_MS = Number(process.env.AI_REFLECT_TIMEOUT_MS ?? 12_000);
+const AI_RETRIES = Number(process.env.AI_HTTP_RETRIES ?? 1);
+
 export async function runAgent(
   domain: BusinessDomain,
   message: string,
   history: ChatMessage[],
   sessionId: string,
   ctx: DomainContext,
+  correlationId?: string,
 ): Promise<string> {
   // 1. Python decide intenção + quais tools chamar (não executa nada).
   const plan = await aiClient.plan({
@@ -20,6 +25,10 @@ export async function runAgent(
     history,
     domainId: domain.id,
     sessionId,
+  }, {
+    correlationId,
+    timeoutMs: PLAN_TIMEOUT_MS,
+    retries: AI_RETRIES,
   });
 
   // 2. Faltam dados? Devolve a pergunta objetiva sem executar tools.
@@ -65,6 +74,10 @@ export async function runAgent(
       ...(hasToolError ? { error: "tool_execution_failed" } : {}),
     },
     sessionId,
+  }, {
+    correlationId,
+    timeoutMs: REFLECT_TIMEOUT_MS,
+    retries: AI_RETRIES,
   });
 
   if (!reflected.approved) {

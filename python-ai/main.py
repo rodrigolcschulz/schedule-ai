@@ -15,15 +15,18 @@ app = FastAPI(title="schedule-ai python service")
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
+    correlation_id = request.headers.get("x-correlation-id", "n/a")
     started = time.perf_counter()
     response = await call_next(request)
     elapsed_ms = round((time.perf_counter() - started) * 1000, 2)
+    response.headers["x-correlation-id"] = correlation_id
     logger.info(
-        "request=%s path=%s status=%s elapsedMs=%s",
+        "event=http_request request=%s path=%s status=%s elapsedMs=%s correlationId=%s",
         request.method,
         request.url.path,
         response.status_code,
         elapsed_ms,
+        correlation_id,
     )
     return response
 

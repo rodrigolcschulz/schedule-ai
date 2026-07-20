@@ -68,6 +68,7 @@ schedule-ai/
 
 - docs/engenharia-ia-conceitos.md
 - docs/postgres-persistence.md
+- docs/sprint-1-hardening-metricas-testes.md
 
 ## Endpoints principais
 
@@ -214,6 +215,9 @@ Observacoes:
 ### API
 
 - AI_BASE_URL (default: http://localhost:8001)
+- AI_PLAN_TIMEOUT_MS (default: 12000)
+- AI_REFLECT_TIMEOUT_MS (default: 12000)
+- AI_HTTP_RETRIES (default: 1)
 - BUSINESS_DOMAIN (default: dental)
 - WHATSAPP_PROVIDER (default: stub)
 - SCHEDULE_PERSISTENCE (memory | postgres, default: memory)
