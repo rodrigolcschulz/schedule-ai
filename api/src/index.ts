@@ -8,6 +8,8 @@ import { dentalDomain } from "./domains/dental/index.js";
 import type { DomainContext } from "./domains/types.js";
 import { runAgent } from "./services/run-agent.js";
 import { aiClient, AiClientError, type ToolExecutionRecord } from "./services/ai-client.js";
+import { createNotificationAgent } from "./services/notification-agent.js";
+import type { PatientStore } from "./domains/dental/patient-store.js";
 
 const domain = dentalDomain;
 const ctx: DomainContext = domain.createContext();
@@ -16,11 +18,21 @@ console.info(`[domain] Active domain: ${domain.displayName} (${domain.id})`);
 
 function envProviderKind(): WhatsAppProviderKind {
   const v = (process.env.WHATSAPP_PROVIDER ?? "stub").toLowerCase();
+  if (v === "cloud") return "cloud";
   if (v === "baileys") return "baileys";
   return "stub";
 }
 
 const wa = createWhatsAppProvider(envProviderKind());
+const notificationAgent = createNotificationAgent(wa);
+
+const maybePatients = (ctx as { patients?: PatientStore }).patients;
+if (maybePatients) {
+  maybePatients.setOnAppointmentCreated(async (appointment) => {
+    await notificationAgent.notifyAppointmentCreated(appointment);
+  });
+}
+
 wa.onMessage(async (msg) => {
   const text = msg.text.trim();
   const lower = text.toLowerCase();
@@ -227,8 +239,26 @@ app.post("/integrations/whatsapp/simulate-inbound", async (req, reply) => {
 });
 
 app.post("/integrations/whatsapp/webhook", async (req) => {
-  req.log.info({ body: req.body }, "whatsapp webhook (não processado no MVP)");
+  if (wa.handleWebhookPayload) {
+    wa.handleWebhookPayload(req.body);
+    return { ok: true };
+  }
+
+  req.log.info({ body: req.body }, "whatsapp webhook (provider sem parser de payload)");
   return { ok: true };
+});
+
+app.get("/integrations/whatsapp/webhook", async (req, reply) => {
+  if (!wa.verifyWebhook) {
+    return reply.code(404).send({ error: "verify_not_supported" });
+  }
+
+  const challenge = wa.verifyWebhook(req.query as Record<string, unknown>);
+  if (!challenge) {
+    return reply.code(403).send({ error: "invalid_verify_token" });
+  }
+
+  return reply.type("text/plain").send(challenge);
 });
 
 const llmChatBody = z.object({

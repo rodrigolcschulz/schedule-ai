@@ -19,6 +19,7 @@ export type PatientAppointment = {
 export interface PatientStoreOptions {
   persistence?: "memory" | "postgres";
   pool?: Pool;
+  onAppointmentCreated?: (appointment: PatientAppointment) => Promise<void> | void;
 }
 
 /**
@@ -28,12 +29,18 @@ export interface PatientStoreOptions {
 export class PatientStore {
   private readonly persistence: "memory" | "postgres";
   private readonly pool: Pool | null;
+  private onAppointmentCreated: ((appointment: PatientAppointment) => Promise<void> | void) | null;
   private schemaReady: Promise<void> | null = null;
   private appointments = new Map<string, PatientAppointment>();
 
   constructor(options?: PatientStoreOptions) {
     this.persistence = options?.persistence ?? "memory";
     this.pool = this.persistence === "postgres" ? (options?.pool ?? getPgPool()) : null;
+    this.onAppointmentCreated = options?.onAppointmentCreated ?? null;
+  }
+
+  setOnAppointmentCreated(handler: (appointment: PatientAppointment) => Promise<void> | void): void {
+    this.onAppointmentCreated = handler;
   }
 
   async createAppointment(
@@ -76,6 +83,7 @@ export class PatientStore {
 
     if (this.persistence !== "postgres") {
       this.appointments.set(appt.id, appt);
+      await this.emitAppointmentCreated(appt);
       return appt;
     }
 
@@ -97,6 +105,8 @@ export class PatientStore {
         appt.createdAt,
       ]
     );
+
+    await this.emitAppointmentCreated(appt);
     return appt;
   }
 
@@ -245,5 +255,19 @@ export class PatientStore {
       })();
     }
     await this.schemaReady;
+  }
+
+  private async emitAppointmentCreated(appointment: PatientAppointment): Promise<void> {
+    if (!this.onAppointmentCreated) return;
+
+    try {
+      await this.onAppointmentCreated(appointment);
+    } catch (err) {
+      console.error("[patient-store] onAppointmentCreated failed", {
+        bookingId: appointment.bookingId,
+        phone: appointment.phone,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 }

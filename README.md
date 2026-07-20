@@ -89,6 +89,8 @@ schedule-ai/
 - POST /llm/chat
 - POST /llm/chat/agent
 - POST /integrations/whatsapp/simulate-inbound
+- GET /integrations/whatsapp/webhook
+- POST /integrations/whatsapp/webhook
 
 ### Python AI (8001)
 
@@ -220,6 +222,11 @@ Observacoes:
 - AI_HTTP_RETRIES (default: 1)
 - BUSINESS_DOMAIN (default: dental)
 - WHATSAPP_PROVIDER (default: stub)
+- WHATSAPP_ACCESS_TOKEN (obrigatorio quando WHATSAPP_PROVIDER=cloud)
+- WHATSAPP_PHONE_NUMBER_ID (obrigatorio quando WHATSAPP_PROVIDER=cloud)
+- WHATSAPP_VERIFY_TOKEN (obrigatorio quando WHATSAPP_PROVIDER=cloud)
+- WHATSAPP_GRAPH_API_VERSION (default: v20.0)
+- WHATSAPP_NOTIFY_ON_BOOKING (default: true)
 - SCHEDULE_PERSISTENCE (memory | postgres, default: memory)
 - PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD
 - DATABASE_URL (opcional, alternativa aos PG*)
@@ -302,7 +309,7 @@ Ela cria as tabelas `bookings` e `appointments` com indices e constraints.
 
 - Persistência de agenda e memória em PostgreSQL
 - Telemetria com correlação de request_id entre API e python-ai
-- Conector real de WhatsApp (Baileys)
+- Conector real de WhatsApp Cloud API (Meta)
 - Painel de observabilidade e histórico de conversas
 - Suporte MCP para ferramentas externas de calendário/CRM
 

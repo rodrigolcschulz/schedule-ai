@@ -15,4 +15,6 @@ export type WhatsAppProvider = {
   stop(): Promise<void>;
   sendText(to: string, body: string): Promise<void>;
   onMessage(handler: (msg: IncomingWhatsAppMessage) => void): void;
+  verifyWebhook?(query: Record<string, unknown>): string | null;
+  handleWebhookPayload?(payload: unknown): void;
 };
