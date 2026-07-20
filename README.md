@@ -4,7 +4,7 @@ AI Scheduling Assistant para atendimento conversacional e agendamento com tool c
 
 Projeto de demo full-stack orientado a portfólio: API de negócio, serviço de IA desacoplado, UI web, integração WhatsApp stub e execução local com Ollama.
 
-https://github.com/user-attachments/assets/671606e1-5dfa-4353-bcb7-7db010db8dd1
+https://github.com/user-attachments/assets/c5f1a5b2-175f-463c-a21f-525f3aea1771
 
 ## Stack
 
