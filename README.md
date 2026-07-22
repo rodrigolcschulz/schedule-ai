@@ -231,6 +231,47 @@ Observacoes:
 - PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD
 - DATABASE_URL (opcional, alternativa aos PG*)
 
+## Configurar webhook da Meta com ngrok free (3 min)
+
+Use este fluxo para desenvolvimento enquanto o app da Meta ainda nao esta publicado (apenas webhooks de teste do painel e conversas de teste).
+
+1. Suba a API local na porta 3001 com provedor cloud:
+
+```powershell
+cd api
+$env:WHATSAPP_PROVIDER="cloud"
+$env:WHATSAPP_ACCESS_TOKEN="SEU_ACCESS_TOKEN"
+$env:WHATSAPP_PHONE_NUMBER_ID="SEU_PHONE_NUMBER_ID"
+$env:WHATSAPP_VERIFY_TOKEN="SEU_TOKEN_DE_VERIFICACAO"
+npm run dev
+```
+
+2. Em outro terminal, abra tunel HTTPS com ngrok free:
+
+```powershell
+ngrok http 3001
+```
+
+3. No painel Meta Developers > WhatsApp > Configuration > Webhooks:
+- Callback URL: `https://SEU-SUBDOMINIO.ngrok-free.app/integrations/whatsapp/webhook`
+- Verify token: o mesmo valor de `WHATSAPP_VERIFY_TOKEN`
+- Clique em Verify and save
+- Em Webhook fields, assine `messages`
+
+4. Teste rapido da verificacao (deve retornar o challenge em texto puro quando token estiver correto):
+
+```powershell
+Invoke-WebRequest -Uri "https://SEU-SUBDOMINIO.ngrok-free.app/integrations/whatsapp/webhook?hub.mode=subscribe&hub.verify_token=SEU_TOKEN_DE_VERIFICACAO&hub.challenge=12345"
+```
+
+5. Teste de evento no painel da Meta:
+- Use Send test webhook no campo `messages`
+- Verifique logs da API: mensagens recebidas e status (`sent`, `delivered`, `read`) sao aceitos no mesmo endpoint
+
+Observacoes:
+- Sem publicar o app, nao ha trafego de producao (somente testes permitidos pela Meta).
+- Para mTLS em webhooks, configure proxy/reverse-proxy com certificado de cliente (ngrok free nao cobre esse requisito por padrao).
+
 ### python-ai
 
 - LLM_PROVIDER (default: ollama)

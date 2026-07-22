@@ -1,4 +1,8 @@
-import type { IncomingWhatsAppMessage, WhatsAppProvider } from "./types.js";
+import type {
+  IncomingWhatsAppMessage,
+  IncomingWhatsAppStatusUpdate,
+  WhatsAppProvider,
+} from "./types.js";
 
 const GRAPH_API_VERSION = process.env.WHATSAPP_GRAPH_API_VERSION ?? "v20.0";
 
@@ -25,6 +29,7 @@ function readTextBody(message: Record<string, unknown>): string {
 
 export function createCloudWhatsAppProvider(): WhatsAppProvider {
   const handlers: Array<(msg: IncomingWhatsAppMessage) => void> = [];
+  const statusHandlers: Array<(status: IncomingWhatsAppStatusUpdate) => void> = [];
   const accessToken = requiredEnv("WHATSAPP_ACCESS_TOKEN");
   const phoneNumberId = requiredEnv("WHATSAPP_PHONE_NUMBER_ID");
   const verifyToken = requiredEnv("WHATSAPP_VERIFY_TOKEN");
@@ -65,6 +70,9 @@ export function createCloudWhatsAppProvider(): WhatsAppProvider {
     onMessage(handler) {
       handlers.push(handler);
     },
+    onStatusUpdate(handler) {
+      statusHandlers.push(handler);
+    },
     verifyWebhook(query) {
       const mode = query["hub.mode"];
       const token = query["hub.verify_token"];
@@ -94,6 +102,7 @@ export function createCloudWhatsAppProvider(): WhatsAppProvider {
 
           const valueObj = value as Record<string, unknown>;
           const messages = Array.isArray(valueObj.messages) ? valueObj.messages : [];
+          const statuses = Array.isArray(valueObj.statuses) ? valueObj.statuses : [];
 
           for (const message of messages) {
             if (!message || typeof message !== "object") continue;
@@ -113,6 +122,36 @@ export function createCloudWhatsAppProvider(): WhatsAppProvider {
 
             for (const handler of handlers) {
               handler(incoming);
+            }
+          }
+
+          for (const status of statuses) {
+            if (!status || typeof status !== "object") continue;
+            const statusObj = status as Record<string, unknown>;
+            const statusValue = typeof statusObj.status === "string" ? statusObj.status : undefined;
+            if (!statusValue) continue;
+
+            const conversation =
+              typeof statusObj.conversation === "object" && statusObj.conversation !== null
+                ? (statusObj.conversation as Record<string, unknown>)
+                : undefined;
+            const pricing =
+              typeof statusObj.pricing === "object" && statusObj.pricing !== null
+                ? (statusObj.pricing as Record<string, unknown>)
+                : undefined;
+
+            const update: IncomingWhatsAppStatusUpdate = {
+              status: statusValue,
+              messageId: typeof statusObj.id === "string" ? statusObj.id : undefined,
+              recipientId: typeof statusObj.recipient_id === "string" ? statusObj.recipient_id : undefined,
+              timestamp: typeof statusObj.timestamp === "string" ? statusObj.timestamp : undefined,
+              conversationId: typeof conversation?.id === "string" ? conversation.id : undefined,
+              pricingCategory: typeof pricing?.category === "string" ? pricing.category : undefined,
+              raw: statusObj,
+            };
+
+            for (const handler of statusHandlers) {
+              handler(update);
             }
           }
         }

@@ -57,6 +57,17 @@ wa.onMessage(async (msg) => {
   }
 });
 
+wa.onStatusUpdate?.((status) => {
+  console.info("[whatsapp] status update", {
+    status: status.status,
+    messageId: status.messageId,
+    recipientId: status.recipientId,
+    timestamp: status.timestamp,
+    conversationId: status.conversationId,
+    pricingCategory: status.pricingCategory,
+  });
+});
+
 const app = Fastify({ logger: true });
 await app.register(cors, { origin: true });
 

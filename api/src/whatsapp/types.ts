@@ -9,12 +9,23 @@ export type IncomingWhatsAppMessage = {
   raw?: unknown;
 };
 
+export type IncomingWhatsAppStatusUpdate = {
+  status: string;
+  messageId?: string;
+  recipientId?: string;
+  timestamp?: string;
+  conversationId?: string;
+  pricingCategory?: string;
+  raw?: unknown;
+};
+
 export type WhatsAppProvider = {
   readonly name: string;
   start(): Promise<void>;
   stop(): Promise<void>;
   sendText(to: string, body: string): Promise<void>;
   onMessage(handler: (msg: IncomingWhatsAppMessage) => void): void;
+  onStatusUpdate?(handler: (status: IncomingWhatsAppStatusUpdate) => void): void;
   verifyWebhook?(query: Record<string, unknown>): string | null;
   handleWebhookPayload?(payload: unknown): void;
 };
