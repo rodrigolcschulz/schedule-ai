@@ -103,14 +103,16 @@ schedule-ai/
 
 ## Rodando localmente
 
-### 1) Subir API + Web
+### Opção 1: execução manual (mais simples para desenvolvimento)
+
+#### 1) Subir API + Web
 
 ```bash
 npm install
 npm run dev
 ```
 
-### 2) Subir python-ai
+#### 2) Subir python-ai
 
 ```bash
 cd python-ai
@@ -121,14 +123,18 @@ pip install -r requirements.txt
 python main.py
 ```
 
-### 3) Garantir Ollama disponível
+#### 3) Garantir o Ollama disponível
+
+O serviço de IA depende de um modelo local ou remoto acessível pelo python-ai.
 
 ```bash
 ollama pull llama3.1
-ollama run llama3.1
-# se necessário
 ollama serve
 ```
+
+Se quiser testar o chat completo no ambiente local, o modelo precisa estar disponível em:
+
+- `http://localhost:11434` (padrão do Ollama)
 
 URLs de desenvolvimento:
 
@@ -136,7 +142,9 @@ URLs de desenvolvimento:
 - API: http://localhost:3001
 - Python AI: http://localhost:8001
 
-## Rodando com Docker
+### Opção 2: execução com Docker
+
+O compose já sobe a API, o serviço Python, o frontend e o PostgreSQL.
 
 ```bash
 docker compose up --build
@@ -148,6 +156,8 @@ Serviços:
 - API: http://localhost:3001
 - Python AI: http://localhost:8001
 - PostgreSQL: localhost:5432
+
+> Observação: o compose não sobe o Ollama automaticamente como dependência principal. O python-ai precisa conseguir alcançar um endpoint do Ollama (por padrão, `http://localhost:11434` no host ou `http://host.docker.internal:11434` quando executado via Docker Desktop).
 
 ## Refresh de sessao e memoria (PowerShell)
 
@@ -194,11 +204,11 @@ Invoke-RestMethod -Method Delete -Uri "http://localhost:8001/ai/memory/SEU_SESSI
 
 Formato do session_id: `wa:SEU_NUMERO`
 
-Exemplo para 47933857058:
+Exemplo para 47999999999:
 
 ```powershell
-Invoke-RestMethod -Method Get -Uri "http://localhost:8001/ai/memory/wa%3A47933857058" | ConvertTo-Json -Depth 8
-Invoke-RestMethod -Method Delete -Uri "http://localhost:8001/ai/memory/wa%3A47933857058"
+Invoke-RestMethod -Method Get -Uri "http://localhost:8001/ai/memory/wa%3A47999999999" | ConvertTo-Json -Depth 8
+Invoke-RestMethod -Method Delete -Uri "http://localhost:8001/ai/memory/wa%3A47999999999"
 ```
 
 ### Rebuild quando houver alteracao de codigo
@@ -231,9 +241,9 @@ Observacoes:
 - PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD
 - DATABASE_URL (opcional, alternativa aos PG*)
 
-## Configurar webhook da Meta com ngrok free (3 min)
+## Configurar webhook da Meta com ngrok (opcional)
 
-Use este fluxo para desenvolvimento enquanto o app da Meta ainda nao esta publicado (apenas webhooks de teste do painel e conversas de teste).
+Este fluxo é opcional e só é necessário quando você quiser testar webhooks do WhatsApp com a Meta. Ele não é obrigatório para usar o chat local, a API ou o frontend.
 
 1. Suba a API local na porta 3001 com provedor cloud:
 
@@ -279,6 +289,8 @@ Observacoes:
 - OLLAMA_MODEL (default: llama3.1)
 - MEMORY_BACKEND (memory | sqlite, default: memory)
 - MEMORY_SQLITE_PATH (default: ./data/memory.db)
+
+> Se o serviço Python estiver rodando em Docker, o Ollama precisa estar acessível a partir do container. Em ambientes Docker Desktop, isso normalmente significa usar `http://host.docker.internal:11434`.
 
 ## Fluxo do agente
 
