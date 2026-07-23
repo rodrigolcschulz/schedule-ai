@@ -5,6 +5,27 @@ import { ScheduleStore, formatSlotTimeBr } from "../../services/schedule-store.j
 import { PatientStore } from "./patient-store.js";
 import { formatServicesText, resolveServiceIdFromText, serviceById } from "./catalog.js";
 
+function formatPriceReply(serviceId: string): string {
+  const svc = serviceById(serviceId);
+  if (!svc) return "Não encontrei esse serviço no catálogo.";
+
+  if (svc.priceReais > 0) {
+    return `R$ ${svc.priceReais}`;
+  }
+
+  return "incluso no tratamento";
+}
+
+function formatDurationReply(serviceId: string): string {
+  const svc = serviceById(serviceId);
+  if (!svc) return "Não encontrei esse serviço no catálogo.";
+  return `${svc.durationMinutes} minutos`;
+}
+
+function formatAppointmentTimeReply(appointment: { startsAt: string; serviceName: string }): string {
+  return `${appointment.serviceName} está agendado para ${formatSlotTimeBr(appointment.startsAt)}.`;
+}
+
 /** Clínica funciona seg–sex 8h–17h (último slot inicia às 17h, termina 18h) */
 const DENTAL_SCHEDULE = {
   firstHour: 8,
@@ -16,6 +37,9 @@ const DENTAL_WA_HELP = [
   "Clínica Odonto Demo — Comandos:",
   "",
   "servicos — lista de procedimentos e preços",
+  "valor / preço — informa o preço de um serviço ou do seu agendamento",
+  "duração / tempo — informa a duração de um serviço",
+  "horário / hora — informa o horário do seu atendimento agendado",
   "horarios YYYY-MM-DD — horários disponíveis",
   "agendar YYYY-MM-DD HH Nome SERVIÇO — ex: agendar 2026-05-10 09 Maria limpeza",
   "meus — suas consultas agendadas",
@@ -52,6 +76,51 @@ export const dentalDomain: BusinessDomain = {
 
     if (lower === "servicos" || lower === "serviços" || lower === "procedimentos") {
       return `Serviços da Clínica Odonto Demo:\n\n${formatServicesText()}`;
+    }
+
+    const asksForPrice = /\b(valor|preço|preco|quanto custa|custa|qual o valor|qual o preço)\b/i.test(lower);
+    if (asksForPrice) {
+      const serviceIdFromText = resolveServiceIdFromText(text);
+      if (serviceIdFromText) {
+        const svc = serviceById(serviceIdFromText);
+        if (!svc) {
+          return "Não encontrei esse serviço no catálogo.";
+        }
+        return `O valor de ${svc.name} é ${formatPriceReply(serviceIdFromText)}.`;
+      }
+
+      const appointments = await patients.listAppointmentsByPhone(from);
+      const latestAppointment = appointments.at(-1);
+      if (latestAppointment) {
+        return `O valor do seu último serviço agendado (${latestAppointment.serviceName}) é ${formatPriceReply(latestAppointment.serviceId)}.`;
+      }
+
+      return "Posso te informar o valor de um procedimento. Tente algo como 'qual o valor da limpeza?' ou 'qual o valor desse serviço agendado?'.";
+    }
+
+    const asksForDuration = /\b(duração|duracao|tempo|quanto tempo|qual a duração)\b/i.test(lower);
+    if (asksForDuration) {
+      const serviceIdFromText = resolveServiceIdFromText(text);
+      if (serviceIdFromText) {
+        const svc = serviceById(serviceIdFromText);
+        if (!svc) {
+          return "Não encontrei esse serviço no catálogo.";
+        }
+        return `${svc.name} tem duração de ${formatDurationReply(serviceIdFromText)}.`;
+      }
+
+      return "Posso te informar a duração de um procedimento. Tente algo como 'qual a duração da limpeza?'.";
+    }
+
+    const asksForAppointmentTime = /\b(horário|horario|hora|qual o horário|qual a hora|quando é|quando começa)\b/i.test(lower);
+    if (asksForAppointmentTime) {
+      const appointments = await patients.listAppointmentsByPhone(from);
+      const latestAppointment = appointments.at(-1);
+      if (latestAppointment) {
+        return formatAppointmentTimeReply(latestAppointment);
+      }
+
+      return "Ainda não encontrei um atendimento agendado para esse telefone.";
     }
 
     // "agendar YYYY-MM-DD HH Nome SERVICO"

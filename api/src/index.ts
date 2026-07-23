@@ -37,6 +37,11 @@ wa.onMessage(async (msg) => {
   const text = msg.text.trim();
   const lower = text.toLowerCase();
 
+  console.info("[whatsapp] processing inbound message", {
+    from: msg.from,
+    text,
+  });
+
   try {
     if (lower === "ajuda" || lower === "help") {
       await wa.sendText(msg.from, domain.whatsAppHelp);
@@ -45,11 +50,19 @@ wa.onMessage(async (msg) => {
 
     const directReply = await domain.handleWhatsAppCommand?.(text, lower, msg.from, ctx);
     if (directReply) {
+      console.info("[whatsapp] sending direct reply", {
+        to: msg.from,
+        reply: directReply,
+      });
       await wa.sendText(msg.from, directReply);
       return;
     }
 
     const reply = await runAgent(domain, text, [], `wa:${msg.from}`, ctx);
+    console.info("[whatsapp] sending agent reply", {
+      to: msg.from,
+      reply,
+    });
     await wa.sendText(msg.from, reply);
   } catch (err) {
     console.error("[whatsapp] failed to process message", err);
@@ -250,6 +263,10 @@ app.post("/integrations/whatsapp/simulate-inbound", async (req, reply) => {
 });
 
 app.post("/integrations/whatsapp/webhook", async (req) => {
+  console.info("[whatsapp] webhook endpoint called", {
+    body: req.body,
+  });
+
   if (wa.handleWebhookPayload) {
     wa.handleWebhookPayload(req.body);
     return { ok: true };

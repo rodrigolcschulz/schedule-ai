@@ -45,10 +45,16 @@ export function createCloudWhatsAppProvider(): WhatsAppProvider {
       console.info("[whatsapp:cloud] stopped");
     },
     async sendText(to: string, body: string) {
+      const normalizedTo = normalizePhone(to);
+      console.info("[whatsapp:cloud] sending text", {
+        to: normalizedTo,
+        bodyLength: body.length,
+      });
+
       const payload = {
         messaging_product: "whatsapp",
         recipient_type: "individual",
-        to: normalizePhone(to),
+        to: normalizedTo,
         type: "text",
         text: { body },
       };
@@ -64,6 +70,11 @@ export function createCloudWhatsAppProvider(): WhatsAppProvider {
 
       if (!response.ok) {
         const detail = await response.text().catch(() => "");
+        console.error("[whatsapp:cloud] sendText failed", {
+          status: response.status,
+          detail,
+          to: normalizedTo,
+        });
         throw new Error(`Meta Graph sendText failed (${response.status}): ${detail}`);
       }
     },
@@ -88,6 +99,9 @@ export function createCloudWhatsAppProvider(): WhatsAppProvider {
 
       const root = payload as Record<string, unknown>;
       const entries = Array.isArray(root.entry) ? root.entry : [];
+      console.info("[whatsapp:cloud] webhook payload received", {
+        entryCount: entries.length,
+      });
 
       for (const entry of entries) {
         if (!entry || typeof entry !== "object") continue;
@@ -119,6 +133,12 @@ export function createCloudWhatsAppProvider(): WhatsAppProvider {
               messageId: typeof messageObj.id === "string" ? messageObj.id : undefined,
               raw: messageObj,
             };
+
+            console.info("[whatsapp:cloud] inbound message", {
+              from: incoming.from,
+              messageId: incoming.messageId,
+              text: body,
+            });
 
             for (const handler of handlers) {
               handler(incoming);

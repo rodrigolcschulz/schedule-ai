@@ -1,5 +1,6 @@
 import type { PatientAppointment } from "../domains/dental/patient-store.js";
 import type { WhatsAppProvider } from "../whatsapp/types.js";
+import { formatSlotTimeBr } from "./schedule-store.js";
 
 export interface NotificationAgent {
   notifyAppointmentCreated(appointment: PatientAppointment): Promise<void>;
@@ -15,8 +16,7 @@ function buildAppointmentMessage(appointment: PatientAppointment): string {
     `Oi, ${appointment.patientName}!`,
     "Seu agendamento foi confirmado.",
     `Servico: ${appointment.serviceName}`,
-    `Data/Hora: ${new Date(appointment.startsAt).toLocaleString("pt-BR")}`,
-    `Codigo: ${appointment.bookingId}`,
+    `Data/Hora: ${formatSlotTimeBr(appointment.startsAt)}`,
   ].join("\n");
 }
 

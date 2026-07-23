@@ -4,12 +4,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "tsx watch src/start.ts",
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/start.js",
+    "test": "node --import tsx --test tests/**/*.test.ts"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.1",
+    "dotenv": "^16.6.1",
     "fastify": "^5.1.0",
     "pg": "^8.16.3",
     "zod": "^3.23.8"
