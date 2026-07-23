@@ -66,7 +66,14 @@ wa.onMessage(async (msg) => {
     await wa.sendText(msg.from, reply);
   } catch (err) {
     console.error("[whatsapp] failed to process message", err);
-    await wa.sendText(msg.from, "Desculpe, não consegui processar agora. Pode tentar novamente?");
+    try {
+      await wa.sendText(msg.from, "Desculpe, não consegui processar agora. Pode tentar novamente?");
+    } catch (fallbackErr) {
+      console.error("[whatsapp] failed to send fallback reply", {
+        to: msg.from,
+        error: fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr),
+      });
+    }
   }
 });
 

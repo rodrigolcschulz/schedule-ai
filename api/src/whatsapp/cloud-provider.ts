@@ -141,7 +141,13 @@ export function createCloudWhatsAppProvider(): WhatsAppProvider {
             });
 
             for (const handler of handlers) {
-              handler(incoming);
+              Promise.resolve(handler(incoming)).catch((err) => {
+                console.error("[whatsapp:cloud] inbound handler failed", {
+                  from: incoming.from,
+                  messageId: incoming.messageId,
+                  error: err instanceof Error ? err.message : String(err),
+                });
+              });
             }
           }
 
@@ -171,7 +177,13 @@ export function createCloudWhatsAppProvider(): WhatsAppProvider {
             };
 
             for (const handler of statusHandlers) {
-              handler(update);
+              Promise.resolve(handler(update)).catch((err) => {
+                console.error("[whatsapp:cloud] status handler failed", {
+                  status: update.status,
+                  messageId: update.messageId,
+                  error: err instanceof Error ? err.message : String(err),
+                });
+              });
             }
           }
         }
