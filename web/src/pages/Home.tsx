@@ -95,7 +95,7 @@ export function Home() {
       });
       await loadSlots();
       await loadAppointments();
-      setMsg("Consulta agendada com sucesso!");
+      setMsg("Atendimento agendado com sucesso!");
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "Erro ao agendar");
     } finally {
@@ -110,7 +110,7 @@ export function Home() {
       await cancelBooking(bookingId);
       await loadSlots();
       await loadAppointments();
-      setMsg("Consulta cancelada.");
+      setMsg("Atendimento cancelado.");
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "Erro ao cancelar");
     } finally {
@@ -123,7 +123,7 @@ export function Home() {
       <header className="header">
         <h1>Clínica Odonto Demo</h1>
         <p className="muted">
-          Agende consultas, veja horários disponíveis e gerencie atendimentos.
+          Agende atendimentos, veja horários disponíveis e gerencie serviços.
           Mesmo backend usado no WhatsApp (stub) e no{" "}
           <Link to="/chat">chat com IA</Link>.
         </p>
@@ -216,15 +216,15 @@ export function Home() {
         )}
       </section>
 
-      {/* Consultas agendadas */}
+      {/* Atendimentos agendados */}
       <section className="card">
-        <h2>Consultas agendadas</h2>
+        <h2>Atendimentos agendados</h2>
         <button type="button" className="ghost" onClick={() => void loadAppointments()}>
           Atualizar lista
         </button>
         <ul className="booking-list">
           {appointments.length === 0 ? (
-            <li className="muted">Nenhuma consulta agendada ainda.</li>
+            <li className="muted">Nenhum atendimento agendado ainda.</li>
           ) : (
             appointments.map((a) => (
               <li key={a.id} className="booking-item">

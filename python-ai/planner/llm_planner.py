@@ -60,7 +60,7 @@ class LLMPlanner:
                 needsClarification=True,
                 missingFields=[],
                 steps=[],
-                suggestedReply="Olá! Que bom falar com você. Posso te ajudar a agendar uma consulta. Se quiser, me diga seu nome para começarmos.",
+                suggestedReply="Olá! Que bom falar com você. Posso te ajudar a agendar um atendimento, verificar horários, informar serviços e preços ou gerenciar agendamentos. Se quiser, me diga seu nome para começarmos.",
             )
 
         # 2. LLM extrai intenção + dados do paciente

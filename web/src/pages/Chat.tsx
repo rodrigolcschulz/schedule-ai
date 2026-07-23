@@ -270,7 +270,7 @@ export function App() {
               <div className="chat-empty">
                 <p>Olá! Posso ajudar a:</p>
                 <ul>
-                  <li>Agendar uma consulta</li>
+                  <li>Agendar avaliação, limpeza ou outro atendimento</li>
                   <li>Verificar horários disponíveis</li>
                   <li>Informar serviços e preços</li>
                   <li>Cancelar ou reagendar</li>
@@ -386,13 +386,6 @@ export function App() {
                           <span className="muted small block">Obs: {a.notes}</span>
                         )}
                       </div>
-                      <button
-                        type="button"
-                        className="ghost small-btn danger"
-                        onClick={() => void onCancel(a.bookingId)}
-                      >
-                        Cancelar
-                      </button>
                     </li>
                   ))}
                 </ul>
